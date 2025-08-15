@@ -1,5 +1,6 @@
 import type { TSESLint } from "@typescript-eslint/utils";
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
+import { isYamlMapping } from "./utils.js";
 
 /**
  * Type for the rule-specific options available in this rule.
@@ -69,7 +70,3 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
 };
 
 export default rule;
-
-const isYamlMapping = (
-  node: AST.YAMLNode | null | undefined
-): node is AST.YAMLMapping => !!node && node.type === "YAMLMapping";

@@ -19,11 +19,10 @@ export const configs = {
         // This states the plugins namespace. It needs to be listed under this in the project its being used
         [PLUGIN_NAME]: { rules },
       },
-      // TODO move these into individual rules' settings so they are properly accessible and more clearly scoped
       settings: {
         [PLUGIN_NAME]: {
           defaultLocale: "en",
-          locales: ["en", "fr", "de"], // TODO expand these to all langauges
+          locales: ["en", "fr", "de"],
           allowedMetaKeys: ["_meta"],
           maxDepth: 2,
           allowNonStringLeaves: false,
