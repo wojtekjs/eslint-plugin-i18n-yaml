@@ -1,4 +1,5 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
+import { ALL_LOCALE_CODES } from "./constants.js";
 import { isYamlMapping } from "./utils.js";
 const rule = {
     meta: {
@@ -23,7 +24,7 @@ const rule = {
     defaultOptions: [],
     create(context) {
         const options = context.options[0] ?? {};
-        const allowedLocales = options?.allowedLocales ?? [];
+        const allowedLocales = options?.allowedLocales ?? ALL_LOCALE_CODES;
         const allowedNonLocaleKeys = options?.allowedNonLocaleKeys ?? ["_meta"];
         const allAllowedKeys = [...allowedNonLocaleKeys, ...allowedLocales];
         return {

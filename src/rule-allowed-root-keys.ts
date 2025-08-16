@@ -1,6 +1,6 @@
 import { TSESLint } from "@typescript-eslint/utils";
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
-import { ALL_LOCALE_CODES } from "./constants.js";
+import { ALL_LOCALE_CODES, META_KEYS } from "./constants.js";
 import { isYamlMapping } from "./utils.js";
 
 type RuleOptions = {
@@ -38,7 +38,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
   create(context) {
     const options = context.options[0] ?? ({} as RuleOptions);
     const allowedLocales = options?.allowedLocales ?? ALL_LOCALE_CODES;
-    const allowedNonLocaleKeys = options?.allowedNonLocaleKeys ?? ["_meta"];
+    const allowedNonLocaleKeys = options?.allowedNonLocaleKeys ?? META_KEYS;
 
     const allAllowedKeys = [...allowedNonLocaleKeys, ...allowedLocales];
 
