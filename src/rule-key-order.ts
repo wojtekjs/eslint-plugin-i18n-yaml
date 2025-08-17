@@ -9,7 +9,7 @@ type RuleOptions = {
   allowedLocales?: string[];
 };
 type Options = [RuleOptions?];
-type MessageIds = "orderedKeys";
+type MessageIds = "orderedKeys" | "suggestedFix";
 
 const rule: TSESLint.RuleModule<MessageIds, Options> = {
   meta: {
@@ -22,6 +22,8 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     messages: {
       orderedKeys:
         "Key '{{key}}' (group '{{group}}') is in position {{actualPosition}} but should be in position {{requiredPosition}}. Expected group order: meta (configured order) → default locale (single key) → all locales (A-Z) → other keys (A-Z).",
+      suggestedFix:
+        "Sort root keys into meta → default → locales (A-Z) → other (A-Z).",
     },
     schema: [
       {
@@ -44,8 +46,6 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     ],
   },
   defaultOptions: [],
-
-  // TODO 2 - implement autofixer on save
 
   create(context) {
     const options = context?.options[0] ?? ({} as RuleOptions);
@@ -71,10 +71,19 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
 
     return {
       YAMLDocument(doc: AST.YAMLDocument) {
+        let didOfferFix = false;
         const root = doc.content;
         if (!isYamlMapping(root)) return;
+        const srcText = context.sourceCode.text;
+        const [mapStart, mapEnd] = root.range;
 
-        const richRootPairs = buildRichRootPairs(root.pairs, keyGroups);
+        const richRootPairs = buildRichRootPairs(
+          root.pairs,
+          keyGroups,
+          mapStart,
+          mapEnd,
+          srcText
+        );
         const sortedPositionedRichPairs = assignPositions(
           richRootPairs,
           keyGroups
@@ -99,6 +108,45 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
                 requiredPosition: expectedPositionInYAML + 1,
               },
             });
+
+            if (!didOfferFix) {
+              const firstChunkStart = richRootPairs[0].chunkStart;
+              // Capturing anything that might exist before the first pair (e.g., comments). Since these are at the top of the file they are likely to be meant to stay at the top
+              const prefix = srcText.slice(mapStart, firstChunkStart);
+              const chunks = sortedPositionedRichPairs.map(
+                (pair) => pair.textChunk
+              );
+              // strip any leading newlines from the first chunk (so moved-first blocks don't add a blank line)
+              if (chunks[0]) chunks[0] = chunks[0].replace(/^\r?\n+/, "");
+
+              // ensure there's exactly one newline between prefix and the first chunk when needed
+              const needsNLBetweenPrefixAndFirst =
+                prefix.length > 0 && // only execute this if there even is a prefix at all
+                !/\r?\n$/.test(prefix) && // prefix does NOT already end with \n (Mac) or \r\n (Windows)
+                !(chunks[0] && /^\r?\n/.test(chunks[0])); // first chunk does NOT already start with \n or \r\n
+              const head = prefix + (needsNLBetweenPrefixAndFirst ? "\n" : "");
+
+              const rebuilt =
+                head +
+                // inserting the first chunk outside of the reducer since we don't want to insert new lines in the same way as for the rest
+                (chunks[0] ?? "") +
+                chunks.slice(1).reduce((acc, currChunk) => {
+                  const leftHasNL = /\r?\n$/.test(acc);
+                  const rightHasNL = /^\r?\n/.test(currChunk);
+                  return (
+                    acc + (leftHasNL || rightHasNL ? "" : "\n") + currChunk
+                  );
+                }, "");
+
+              context.report({
+                node: root as any,
+                messageId: "suggestedFix",
+                fix(fixer) {
+                  return fixer.replaceTextRange([mapStart, mapEnd], rebuilt);
+                },
+              });
+              didOfferFix = true;
+            }
           }
         }
       },
@@ -127,18 +175,48 @@ type RichPair = {
   expectedPositionInGroup?: number;
   originalIndex: number;
   location: AST.SourceLocation;
+  textChunk: string;
+  chunkStart: number;
 };
 
 type PositionedRichPair = RichPair & { expectedPositionInGroup: number };
 
 const buildRichRootPairs = (
   basePairs: AST.YAMLPair[],
-  keyGroups: KeyGroupMap
+  keyGroups: KeyGroupMap,
+  mapStart: number,
+  mapEnd: number,
+  srcText: string
 ): RichPair[] => {
+  const basePairLen = basePairs.length;
+  if (basePairLen === 0) return [];
+
+  // Precompute non-overlapping chunk starts (leading-comment policy)
+  const regexCommentPattern = /^(?:\s*(?:#.*)?\r?\n)*\s*$/; // only blank/comment lines
+  const chunkStarts: number[] = new Array(basePairLen);
+
+  for (let i = 0; i < basePairLen; i++) {
+    const pairStart = basePairs[i].range[0];
+    const prevEnd = i === 0 ? mapStart : basePairs[i - 1].range[1];
+    const between = srcText.slice(prevEnd, pairStart);
+
+    // Policy: comments above keys always belong to that key except for lines above the first locale, those are assumed to be header comments that should say pinned at the top
+    chunkStarts[i] =
+      i === 0
+        ? pairStart // replace with mapStart if i want to change policy to attach the top comment(s) to the first chunk rather than leaving them as header comment(s)
+        : regexCommentPattern.test(between)
+        ? prevEnd
+        : pairStart;
+  }
+
   return basePairs.flatMap<RichPair>((pair, idx) => {
     if (!pair.key) return [];
     const stringKey = String(getStaticYAMLValue(pair.key));
     const keyGroup = getKeyGroup(stringKey, keyGroups);
+
+    const chunkStart = chunkStarts[idx];
+    const nextStart = idx < basePairLen - 1 ? chunkStarts[idx + 1] : mapEnd;
+    const pairTextChunk = srcText.slice(chunkStart, nextStart);
     // Returning an array because flatMap expects an array it can flatten (thereby extracting this one object)
     return [
       {
@@ -148,6 +226,8 @@ const buildRichRootPairs = (
         groupPosition: keyGroups[keyGroup].expectedGroupPosition,
         originalIndex: idx,
         location: pair.key.loc,
+        textChunk: pairTextChunk,
+        chunkStart,
       },
     ];
   });
