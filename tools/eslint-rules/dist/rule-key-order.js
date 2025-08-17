@@ -9,7 +9,7 @@ const rule = {
             description: "Prefer root-level key ordering by meta → default locale → all locales → other keys, with intra-group alphabetical sorting.",
         },
         messages: {
-            orderedKeys: "Key '{{key}}' is out of order. Expected ordering: meta keys, default locale, all locales, other keys. Keys in each group should be sorted alphabetically.",
+            orderedKeys: "Key '{{key}}' (group '{{group}}') is in position {{actualPosition}} but should be in position {{requiredPosition}}. Expected group order: meta → default locale → all locales → other keys. Keys in each group should be sorted alphabetically.",
         },
         schema: [
             {
@@ -24,6 +24,9 @@ const rule = {
         ],
     },
     defaultOptions: [],
+    // TODO 1 - clean up code, very ugly rn
+    // TODO 1.5 - consider best error message (how do i share group of key, how do i indicate best order, etc.)
+    // TODO 2 - implement autofixer on save
     create(context) {
         const options = context?.options[0] ?? {};
         const metaKeys = options.metaKeys ?? META_KEYS;
@@ -45,14 +48,14 @@ const rule = {
                 const unsortedKeyRanks = [];
                 for (const group of [metaKeys, defaultLocale, allowedLocales]) {
                     const keysInGroup = rootKeys.filter((k) => group.includes(k));
-                    for (const [idx, k] of keysInGroup.entries()) {
+                    for (const k of keysInGroup) {
                         const keyGroup = getKeyGroup(k, metaKeys, defaultLocale, allowedLocales);
                         unsortedKeyRanks.push({
                             key: k,
                             groupName: keyGroup,
                             groupPosition: KEY_GROUPS.indexOf(keyGroup),
                             keyPositionInGroup: rankKeyInGroup(k, keysInGroup, group),
-                            keyActualPosition: rootKeys.indexOf(k),
+                            keyActualPositionInYAML: rootKeys.indexOf(k),
                         });
                     }
                 }
@@ -65,7 +68,7 @@ const rule = {
                         groupName: "other",
                         groupPosition: KEY_GROUPS.indexOf("other"),
                         keyPositionInGroup: idx,
-                        keyActualPosition: rootKeys.indexOf(otherKey),
+                        keyActualPositionInYAML: rootKeys.indexOf(otherKey),
                     });
                 }
                 const sortedKeyRanks = sortKeys(unsortedKeyRanks);
@@ -75,12 +78,18 @@ const rule = {
                     if (!pair.key || !pair.value)
                         continue;
                     const stringKey = String(getStaticYAMLValue(pair.key));
-                    if (runningIndex !== sortedPlainkeys.indexOf(stringKey)) {
+                    const requiredPosition = sortedPlainkeys.indexOf(stringKey);
+                    if (runningIndex !== requiredPosition) {
                         context.report({
                             loc: pair.key.loc,
                             messageId: "orderedKeys",
                             data: {
                                 key: stringKey,
+                                group: sortedKeyRanks.find((r) => r.key === stringKey)
+                                    ?.groupName,
+                                // Adding 1 to each to ensure user-facing count is 1-based (not 0-based)
+                                actualPosition: runningIndex + 1,
+                                requiredPosition: requiredPosition + 1,
                             },
                         });
                     }

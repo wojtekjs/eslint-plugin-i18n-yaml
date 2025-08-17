@@ -21,7 +21,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     },
     messages: {
       orderedKeys:
-        "Key '{{key}}' is out of order. Expected ordering: meta keys, default locale, all locales, other keys. Keys in each group should be sorted alphabetically.",
+        "Key '{{key}}' (group '{{group}}') is in position {{actualPosition}} but should be in position {{requiredPosition}}. Expected group order: meta → default locale → all locales → other keys. Keys in each group should be sorted alphabetically.",
     },
     schema: [
       {
@@ -106,13 +106,19 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
         for (const pair of root.pairs) {
           if (!pair.key || !pair.value) continue;
           const stringKey = String(getStaticYAMLValue(pair.key));
+          const requiredPosition = sortedPlainkeys.indexOf(stringKey);
 
-          if (runningIndex !== sortedPlainkeys.indexOf(stringKey)) {
+          if (runningIndex !== requiredPosition) {
             context.report({
               loc: pair.key.loc,
               messageId: "orderedKeys",
               data: {
                 key: stringKey,
+                group: sortedKeyRanks.find((r) => r.key === stringKey)
+                  ?.groupName,
+                // Adding 1 to each to ensure user-facing count is 1-based (not 0-based)
+                actualPosition: runningIndex + 1,
+                requiredPosition: requiredPosition + 1,
               },
             });
           }
