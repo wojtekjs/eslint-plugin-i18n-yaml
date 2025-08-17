@@ -24,76 +24,48 @@ const rule = {
         ],
     },
     defaultOptions: [],
-    // TODO 1 - clean up code, very ugly rn
-    // TODO 1.5 - consider best error message (how do i share group of key, how do i indicate best order, etc.)
     // TODO 2 - implement autofixer on save
     create(context) {
         const options = context?.options[0] ?? {};
-        const metaKeys = options.metaKeys ?? META_KEYS;
-        const defaultLocale = options.defaultLocale
-            ? [options.defaultLocale]
-            : [DEFAULT_LOCALE];
-        const allowedLocales = (options.allowedLocales ?? ALL_LOCALE_CODES).filter((l) => !defaultLocale.includes(l));
+        const defaultLocale = options.defaultLocale ?? DEFAULT_LOCALE;
+        const keyGroups = {
+            meta: {
+                expectedGroupPosition: 0,
+                permittedKeys: options.metaKeys ?? META_KEYS,
+            },
+            default: {
+                expectedGroupPosition: 1,
+                permittedKeys: [defaultLocale],
+            },
+            locales: {
+                expectedGroupPosition: 2,
+                permittedKeys: (options.allowedLocales ?? ALL_LOCALE_CODES).filter((l) => l !== defaultLocale),
+            },
+            other: { expectedGroupPosition: 3, permittedKeys: [] },
+        };
         return {
             YAMLDocument(doc) {
                 const root = doc.content;
                 if (!isYamlMapping(root))
                     return;
-                const rootKeys = [];
-                for (const pair of root.pairs) {
-                    if (!pair.key)
-                        continue;
-                    rootKeys.push(String(getStaticYAMLValue(pair.key)));
-                }
-                const unsortedKeyRanks = [];
-                for (const group of [metaKeys, defaultLocale, allowedLocales]) {
-                    const keysInGroup = rootKeys.filter((k) => group.includes(k));
-                    for (const k of keysInGroup) {
-                        const keyGroup = getKeyGroup(k, metaKeys, defaultLocale, allowedLocales);
-                        unsortedKeyRanks.push({
-                            key: k,
-                            groupName: keyGroup,
-                            groupPosition: KEY_GROUPS.indexOf(keyGroup),
-                            keyPositionInGroup: rankKeyInGroup(k, keysInGroup, group),
-                            keyActualPositionInYAML: rootKeys.indexOf(k),
-                        });
-                    }
-                }
-                const miscOtherKeys = rootKeys.filter((k) => !metaKeys.includes(k) &&
-                    !defaultLocale.includes(k) &&
-                    !allowedLocales.includes(k));
-                for (const [idx, otherKey] of miscOtherKeys.entries()) {
-                    unsortedKeyRanks.push({
-                        key: otherKey,
-                        groupName: "other",
-                        groupPosition: KEY_GROUPS.indexOf("other"),
-                        keyPositionInGroup: idx,
-                        keyActualPositionInYAML: rootKeys.indexOf(otherKey),
-                    });
-                }
-                const sortedKeyRanks = sortKeys(unsortedKeyRanks);
-                const sortedPlainkeys = sortedKeyRanks.map((keyRank) => keyRank.key);
-                let runningIndex = 0;
-                for (const pair of root.pairs) {
-                    if (!pair.key || !pair.value)
-                        continue;
-                    const stringKey = String(getStaticYAMLValue(pair.key));
-                    const requiredPosition = sortedPlainkeys.indexOf(stringKey);
-                    if (runningIndex !== requiredPosition) {
+                const richRootPairs = buildRichRootPairs(root.pairs, keyGroups);
+                const sortedPositionedRichPairs = assignPositions(richRootPairs, keyGroups).sort(byRank);
+                const keyIndexMap = new Map(sortedPositionedRichPairs.map((pair, i) => [pair.key, i]));
+                for (const pair of richRootPairs) {
+                    const expectedPositionInYAML = keyIndexMap.get(pair.key);
+                    if (pair.originalIndex !== expectedPositionInYAML) {
                         context.report({
-                            loc: pair.key.loc,
+                            loc: pair.location,
                             messageId: "orderedKeys",
                             data: {
-                                key: stringKey,
-                                group: sortedKeyRanks.find((r) => r.key === stringKey)
-                                    ?.groupName,
+                                key: pair.key,
+                                group: pair.group,
                                 // Adding 1 to each to ensure user-facing count is 1-based (not 0-based)
-                                actualPosition: runningIndex + 1,
-                                requiredPosition: requiredPosition + 1,
+                                actualPosition: pair.originalIndex + 1,
+                                requiredPosition: expectedPositionInYAML + 1,
                             },
                         });
                     }
-                    runningIndex += 1;
                 }
             },
         };
@@ -101,32 +73,70 @@ const rule = {
 };
 export default rule;
 const KEY_GROUPS = ["meta", "default", "locales", "other"];
-const getKeyGroup = (key, metaKeys, defaultLocale, allowedLocales) => {
-    switch (true) {
-        case metaKeys.includes(key):
-            return "meta";
-        case defaultLocale.includes(key):
-            return "default";
-        case allowedLocales.includes(key):
-            return "locales";
-        default:
-            return "other";
-    }
+const buildRichRootPairs = (basePairs, keyGroups) => {
+    return basePairs.flatMap((pair, idx) => {
+        if (!pair.key)
+            return [];
+        const stringKey = String(getStaticYAMLValue(pair.key));
+        const keyGroup = getKeyGroup(stringKey, keyGroups);
+        // Returning an array because flatMap expects an array it can flatten (thereby extracting this one object)
+        return [
+            {
+                key: stringKey,
+                pair,
+                group: keyGroup,
+                groupPosition: keyGroups[keyGroup].expectedGroupPosition,
+                originalIndex: idx,
+                location: pair.key.loc,
+            },
+        ];
+    });
 };
-const rankKeyInGroup = (targetKey, otherKeysInGroup, groupKeys) => {
-    const rankedPresentKeys = [];
-    for (const groupKey of groupKeys) {
-        if (otherKeysInGroup.includes(groupKey))
-            rankedPresentKeys.push(groupKey);
-    }
-    return rankedPresentKeys.indexOf(targetKey);
+const assignPositions = (richPairs, keyGroups) => {
+    const collator = new Intl.Collator("en", {
+        sensitivity: "base",
+        numeric: true,
+    });
+    const presentKeys = {
+        meta: [],
+        default: [],
+        locales: [],
+        other: [],
+    };
+    for (const p of richPairs)
+        presentKeys[p.group].push(p.key);
+    const expectedMetaOrder = keyGroups.meta.permittedKeys.filter((k) => presentKeys.meta.includes(k));
+    const expectedDefaultOrder = presentKeys.default.length
+        ? [presentKeys.default[0]]
+        : [];
+    const expectedLocalesOrder = [...presentKeys.locales].sort(collator.compare);
+    const expectedOtherOrder = [...presentKeys.other].sort(collator.compare);
+    const idx = {
+        meta: new Map(expectedMetaOrder.map((k, i) => [k, i])),
+        default: new Map(expectedDefaultOrder.map((k, i) => [k, i])),
+        locales: new Map(expectedLocalesOrder.map((k, i) => [k, i])),
+        other: new Map(expectedOtherOrder.map((k, i) => [k, i])),
+    };
+    return richPairs.map((p) => ({
+        ...p,
+        expectedPositionInGroup: p.group === "meta"
+            ? idx.meta.get(p.key) ?? 0
+            : p.group === "default"
+                ? 0
+                : p.group === "locales"
+                    ? idx.locales.get(p.key) ?? 0
+                    : idx.other.get(p.key) ?? 0,
+    }));
 };
-const sortKeys = (rankedKeys) => {
-    const intraGroupSortedKeys = [];
-    for (const group of KEY_GROUPS) {
-        const keysInGroup = rankedKeys.filter((key) => key.groupName === group);
-        const sortedKeysInGroup = keysInGroup.sort((a, b) => a.keyPositionInGroup - b.keyPositionInGroup);
-        intraGroupSortedKeys.push(...sortedKeysInGroup);
-    }
-    return intraGroupSortedKeys.sort((a, b) => a.groupPosition - b.groupPosition);
+const getKeyGroup = (key, keyGroups) => {
+    if (keyGroups.meta.permittedKeys.includes(key))
+        return "meta";
+    if (key === keyGroups.default.permittedKeys[0])
+        return "default";
+    if (keyGroups.locales.permittedKeys.includes(key))
+        return "locales";
+    return "other";
 };
+const byRank = (a, b) => a.groupPosition - b.groupPosition ||
+    a.expectedPositionInGroup - b.expectedPositionInGroup ||
+    a.originalIndex - b.originalIndex;
