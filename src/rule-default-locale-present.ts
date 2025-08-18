@@ -22,6 +22,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     type: "problem",
     docs: {
       description: "Require default language to be present at the YAML root.",
+      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamldefault-locale-present",
     },
     schema: [
       {

@@ -17,6 +17,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     docs: {
       description:
         "Disallow non-locale or exceptional meta keys at root-level in i18n YAML files",
+      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlallowed-root-keys",
     },
     messages: {
       disallowedRootKey:

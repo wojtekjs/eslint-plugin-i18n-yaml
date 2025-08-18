@@ -241,7 +241,7 @@ en:
   - `locales`: key is in `allowedLocales` **excluding** `defaultLocale`.
   - `other`: everything else.
 
-- Reports when a key’s position doesn’t match the expected location based on where 1) the group should be located and 2) the key's epected intra-group index.
+- Reports the entire file when a key’s position doesn’t match the expected location based on (1) where the group should be located, and (2) the key's epected intra-group index.
 - Provides a single document-level autofix that reorders blocks into the correct order.
 - **Comments policy in autofix**: line comments immediately above a key **stick with that key**; top-of-file header comments are preserved at the very top.
 

@@ -18,6 +18,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     docs: {
       description:
         "Prefer root-level key ordering by meta → default locale → all locales → other keys, with intra-group alphabetical sorting.",
+      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlkey-order",
     },
     messages: {
       orderedKeys:

@@ -15,6 +15,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     type: "problem",
     docs: {
       description: "Constrain nesting depth in i18n YAML files",
+      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlmax-depth",
     },
     messages: {
       exceededMaxDepth:

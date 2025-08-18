@@ -7,6 +7,7 @@ const rule = {
         fixable: "code",
         docs: {
             description: "Prefer root-level key ordering by meta → default locale → all locales → other keys, with intra-group alphabetical sorting.",
+            url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlkey-order",
         },
         messages: {
             orderedKeys: "Key '{{key}}' (group '{{group}}') is in position {{actualPosition}} but should be in position {{requiredPosition}}. Expected group order: meta (configured order) → default locale (single key) → all locales (A-Z) → other keys (A-Z).",
@@ -88,8 +89,8 @@ const rule = {
                                 chunks[0] = chunks[0].replace(/^\r?\n+/, "");
                             // ensure there's exactly one newline between prefix and the first chunk when needed
                             const needsNLBetweenPrefixAndFirst = prefix.length > 0 && // only execute this if there even is a prefix at all
-                                !/\r?\n$/.test(prefix) && // prefix does NOT already end with \n or \r\n
-                                !(chunks[0] && /^\r?\n/.test(chunks[0])); // AND first chunk does NOT already start with \n or \r\n
+                                !/\r?\n$/.test(prefix) && // prefix does NOT already end with \n (Mac) or \r\n (Windows)
+                                !(chunks[0] && /^\r?\n/.test(chunks[0])); // first chunk does NOT already start with \n or \r\n
                             const head = prefix + (needsNLBetweenPrefixAndFirst ? "\n" : "");
                             const rebuilt = head +
                                 // inserting the first chunk outside of the reducer since we don't want to insert new lines in the same way as for the rest
