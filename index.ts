@@ -5,6 +5,7 @@ export const PLUGIN_NAME = "i18n-yaml";
 
 export const rules = {};
 
+// TODO add urls to each README section per rule (meta.docs.url)
 export const configs = {
   // Enables the plugin for *.i18n.yaml files with sane defaults.
   "flat/recommended": [
