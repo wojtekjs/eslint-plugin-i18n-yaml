@@ -183,11 +183,14 @@ export const ALL_LOCALE_CODES = [
   "za",
   "zh",
   "zu",
-];
+] as const;
+
+export const ALL_LOCALE_CODES_SET = new Set(ALL_LOCALE_CODES);
+
+export type LocaleCode = (typeof ALL_LOCALE_CODES)[number];
 
 export const META_KEYS = ["_meta", "_component"];
 
-export const DEFAULT_LOCALE =
-  "en" as const satisfies (typeof ALL_LOCALE_CODES)[number];
+export const DEFAULT_LOCALE = "en" as const satisfies LocaleCode;
 
 export const MAX_NESTING_DEPTH = 2;

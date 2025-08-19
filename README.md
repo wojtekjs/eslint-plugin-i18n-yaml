@@ -192,7 +192,7 @@ export default [
 > Note: `maxDepth: 0` means **no keys** are allowed in the YAML at all. `maxDepth: 1` means no keys are allowed beneath the top-level key (useful for files that should only contain flat locale keys with no nesting).
 
 **Examples**
-\*With \*_`maxDepth: 3`_
+_With `maxDepth: 3`_
 
 ✅ **Allowed**
 
@@ -291,5 +291,70 @@ notes: …
 - Rule type: `layout`; `fixable: "code"`.
 - Sorting within groups uses `Intl.Collator('en', { sensitivity: 'base', numeric: true })` for human-friendly ordering.
 - Works only at the **root mapping** level; it does not reorder nested mappings.
+
+**Status**: Stable.
+
+---
+
+### `i18n-yaml/deep-keys-parity`
+
+**What it is**: Ensures **all locales share the same nested key structure**. Each locale must contain every key path found in other locales. This is to ensure that every key renders content on the page, irrespective of the language chosen by the user.
+
+**What it enforces**
+
+- For each locale, reports when a path is missing that exists in at least one other locale.
+- Paths include nested objects and arrays of objects (see examples below).
+- Reports keys that exist on all locales but do not have the same path in each locale.
+
+**Configuration**
+
+- **`singleComprehensiveLocale`** (string, optional): Treat this locale as the single source of truth. When set, the rule only checks that this locale contains all keys present in other locales. Missing keys are only reported for the specified locale, and no reports are generated for the others. If provided, the value must be a 2-letter locale code; e.g., 'en', 'fr'.
+
+**Examples**
+
+_Missing key_
+
+```yaml
+en: # ⚠️ Locale 'en' is missing key 'text' (expected path: en.text) • Present in: 'fr'"
+  title: big title
+  subtitle: small title
+fr:
+  title: grand titre
+  subtitle: petit titre
+  text: contenu
+```
+
+_Missing key from object_
+
+```yaml
+en: # ⚠️ Locale 'en' is missing nested key 'a' (expected path: en.text.a) • Present in: 'fr'
+  title: TITLE
+  text: { b: 2 }
+fr:
+  title: TITRE
+  text: { a: 1, b: 2 }
+```
+
+_Missing deep-nested key from object_
+
+```yaml
+# ⚠️ Locale 'en' is missing nested key 'a' (expected path: en.text.a) • Present in: 'fr'
+# ⚠️ Locale 'en' is missing nested key 'obj' (expected path: en.text.a.obj) • Present in: 'fr'
+# ⚠️ Locale 'en' is missing nested key 'i' (expected path: en.text.a.obj.i) • Present in: 'fr'
+en:
+  title: TITLE
+  text: { b: 2 }
+fr:
+  title: TITRE
+  text: { a: [{ obj: [{ i: 9 }] }], b: 2 }
+```
+
+**Notes**
+
+- Paths are represented by joining segments with `"."` (e.g., `en.title`). This can become **ambiguous if your keys themselves contain dots**.  
+  👉 Recommended: also enable case-enforcing rules from [`eslint-plugin-yml`](https://ota-meshi.github.io/eslint-plugin-yml/)  
+  (`yml/key-name-casing`) or add project-specific rules to forbid dots in keys.
+- The rule does **not autofix**, since inserting translations automatically is unsafe.
+- Performance is optimized using **set-based maps**, making it practical even for large YAMLs with hundreds of keys.
 
 **Status**: Stable.

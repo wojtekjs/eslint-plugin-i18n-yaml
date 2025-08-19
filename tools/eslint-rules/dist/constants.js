@@ -184,6 +184,7 @@ export const ALL_LOCALE_CODES = [
     "zh",
     "zu",
 ];
+export const ALL_LOCALE_CODES_SET = new Set(ALL_LOCALE_CODES);
 export const META_KEYS = ["_meta", "_component"];
 export const DEFAULT_LOCALE = "en";
 export const MAX_NESTING_DEPTH = 2;

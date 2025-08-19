@@ -19,7 +19,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     },
     messages: {
       exceededMaxDepth:
-        "Depth of mapping {{locale}}.{{path}} ({{currentDepth}}) exceeds permitted maximum ({{maxDepth}})",
+        "Depth limit exceeded at {{locale}}.{{path}}: mapping has depth {{currentDepth}} which exceeds the permitted maximum of {{maxDepth}}",
     },
     schema: [
       {
