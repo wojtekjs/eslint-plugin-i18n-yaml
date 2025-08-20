@@ -19,8 +19,7 @@ This package is **not published to npm** yet. Use one of the following approache
 
 **1) Git dependency (recommended)**
 
-```json
-// package.json
+```jsonc title="package.json"
 {
   "devDependencies": {
     "eslint-plugin-i18n-yaml": "git+ssh://git@github.com/YOUR_ORG/eslint-plugin-i18n-yaml.git#main"
@@ -174,6 +173,7 @@ export default [
 > Note: `maxDepth: 0` means **no keys** are allowed in the YAML at all. `maxDepth: 1` means no keys are allowed beneath the top-level key (useful for files that should only contain flat locale keys with no nesting).
 
 **Examples**
+
 _With `maxDepth: 3`_
 
 ✅ **Allowed**
@@ -235,6 +235,7 @@ en:
   - **Default:** All known locale codes.
 
 **Examples**
+
 _Before (unsorted)_
 
 ```yaml
