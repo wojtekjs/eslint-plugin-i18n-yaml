@@ -108,6 +108,7 @@ export default [
 **Configuration**
 
 - **`defaultLocale`** (`string`, optional): Specifies which locale must always be present in the YAML file. If this locale key is missing, the rule will report an error.
+
   - **Valid values:** Any 2-letter locale code (e.g., `"en"`, `"fr"`).
   - **Default:** `"en"`
 
@@ -139,6 +140,7 @@ export default [
   - **Default:** All known locale codes
 
 - **`allowedNonLocaleKeys`** (`string[]`, optional): Defines which non-locale keys are permitted at the root level (e.g., metadata blocks). Any other non-locale root keys will be reported.
+
   - **Default:** `["_meta"]`
 
 **Notes**
@@ -166,6 +168,7 @@ export default [
 **Configuration**
 
 - **`maxDepth`** (`number`, optional): Sets the maximum allowed nesting depth for keys in the YAML file. Any key path deeper than this limit will be reported.
+
   - **Default:** `2`
 
 > Note: `maxDepth: 0` means **no keys** are allowed in the YAML at all. `maxDepth: 1` means no keys are allowed beneath the top-level key (useful for files that should only contain flat locale keys with no nesting).
@@ -227,6 +230,7 @@ en:
   - **Default:** `"en"`
 
 - **`allowedLocales`** (`string[]`, optional): Restricts which locale codes are recognized and ordered. Keys outside this list are ignored.
+
   - **Valid values:** Any 2-letter locale codes (e.g., `"en"`, `"fr"`).
   - **Default:** All known locale codes.
 
@@ -282,6 +286,7 @@ notes: …
 **Configuration**
 
 - **`singleComprehensiveLocale`** (`string`, optional): Treat this locale as the single source of truth. When set, the rule only checks that this locale contains all keys present in other locales. Missing keys are only reported for the specified locale, and no reports are generated for the others.
+
   - **Valid values:** Any 2-letter locale code (e.g., `"en"`, `"fr"`).
   - **Default:** Not set.
 
