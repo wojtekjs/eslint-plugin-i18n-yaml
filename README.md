@@ -8,7 +8,7 @@ Custom ESLint rules for i18n YAML files. Keep locale files consistent by enforci
 - Restrict root keys to allowed locales and optional meta keys.
 - Enforce a maximum nesting depth under each locale.
 - Keep header keys and locale blocks in a consistent, alphabetical order (autofix).
-- _(Planned)_ Verify deep key parity with the default locale (same paths and value kinds).
+- Verify deep key parity across all present locales (or optionally, only against a single locale).
 - _(Planned)_ Verify placeholder parity across locales for leaf strings.
 
 ---
@@ -50,8 +50,6 @@ This package is **not published to npm** yet. Use one of the following approache
 - **ESLint**: v8+
 - **Parser**: `yaml-eslint-parser`
 
-> Add the YAML parser only for YAML files.
-
 ### Flat Config — Quick start
 
 This plugin ships a Flat Config preset at `configs["flat/recommended"]`.
@@ -79,24 +77,13 @@ export default [
     files: ["**/*.i18n.yaml", "**/*.i18n.yml"],
     languageOptions: { parser: ymlParser },
     plugins: { "i18n-yaml": i18nYaml },
-    settings: {
-      "i18n-yaml": {
-        defaultLocale: "en",
-        locales: ["en", "fr", "de"],
-        allowedMetaKeys: ["_meta"],
-        maxDepth: 2,
-        allowNonStringLeaves: false,
-        placeholderRegex: "\\{([a-zA-Z0-9_]+)\\}",
-        escapeDoubleBrace: true,
-      },
-    },
     rules: {
       "i18n-yaml/default-locale-present": "error",
       "i18n-yaml/allowed-root-locales": "error",
       "i18n-yaml/max-depth": "error",
       "i18n-yaml/key-order": "warn",
+      "i18n-yaml/deep-keys-parity": "warn",
       // Planned / coming soon (see status under each rule):
-      // 'i18n-yaml/deep-keys-parity': 'error',
       // 'i18n-yaml/placeholder-parity': 'error',
     },
   },
@@ -120,18 +107,14 @@ export default [
 
 **Configuration**
 
-```js
-{
-  defaultLocale?: string; // default: 'en'
-}
-```
+- **`defaultLocale`** (`string`, optional): Specifies which locale must always be present in the YAML file. If this locale key is missing, the rule will report an error.
+  - **Valid values:** Any 2-letter locale code (e.g., `"en"`, `"fr"`).
+  - **Default:** `"en"`
 
 **Notes**
 
 - Case‑sensitive match; only checks mapping roots.
 - No autofix (the rule cannot infer content for the default locale block).
-
-**Status**: Stable.
 
 ---
 
@@ -150,20 +133,19 @@ export default [
 
 **Configuration**
 
-```js
-{
-  allowedLocales?: string[];        // default: ALL_LOCALE_CODES
-  allowedNonLocaleKeys?: string[];  // default: META_KEYS (e.g., ['_meta'])
-}
-```
+- **`allowedLocales`** (`string[]`, optional): Defines which locale codes are permitted at the root level of the YAML file. Keys outside this list will be reported.
+
+  - **Valid values:** Any 2-letter locale code (e.g., `"en"`, `"fr"`).
+  - **Default:** All known locale codes
+
+- **`allowedNonLocaleKeys`** (`string[]`, optional): Defines which non-locale keys are permitted at the root level (e.g., metadata blocks). Any other non-locale root keys will be reported.
+  - **Default:** `["_meta"]`
 
 **Notes**
 
 - By default, the rule permits **all known locale codes** plus the built-in meta keys (`_meta`). To tighten allowed locales, set `allowedLocales` explicitly. To turn off meta keys, set `allowedNonLocaleKeys` to `[]`.
 - Keys are matched exactly (case-sensitive). Only mapping roots are checked.
 - The provided Flat preset enables this rule without options, relying on the internal defaults. Override per-project by supplying options in your `rules` config if needed.
-
-**Status**: Stable.
 
 ---
 
@@ -183,11 +165,8 @@ export default [
 
 **Configuration**
 
-```js
-{
-  maxDepth?: number; // default: MAX_NESTING_DEPTH (set to 2)
-}
-```
+- **`maxDepth`** (`number`, optional): Sets the maximum allowed nesting depth for keys in the YAML file. Any key path deeper than this limit will be reported.
+  - **Default:** `2`
 
 > Note: `maxDepth: 0` means **no keys** are allowed in the YAML at all. `maxDepth: 1` means no keys are allowed beneath the top-level key (useful for files that should only contain flat locale keys with no nesting).
 
@@ -200,7 +179,7 @@ _With `maxDepth: 3`_
 en:
   auth:
     login: Sign in
-    # depth: en(1) → auth(2) → login(3). Login is permitted.
+    # depth: en(1) → auth(2) → login(3). 'login' is permitted.
 ```
 
 ❌ **Disallowed**
@@ -210,14 +189,12 @@ en:
   auth:
     login:
       title: Sign in
-      # depth: en(1) → auth(2) → login(3) → title(4). Title violates the rule.
+      # depth: en(1) → auth(2) → login(3) → title(4). 'title' violates the rule.
 ```
 
 **Notes**
 
 - The value set for `maxDepth` will be the last nesting level allowed in the YAML, with the count starting at 1 for root-level keys.
-
-**Status**: Stable.
 
 ---
 
@@ -234,26 +211,24 @@ en:
   3. **locales** → all other locales in **A–Z** order (case/diacritics-insensitive, numeric-aware)
   4. **other** → any non-locale, non-meta keys in **A–Z** order
 
-- Group membership:
-
-  - `meta`: key is included in `metaKeys`.
-  - `default`: key equals `defaultLocale`.
-  - `locales`: key is in `allowedLocales` **excluding** `defaultLocale`.
-  - `other`: everything else.
-
 - Reports the entire file when a key’s position doesn’t match the expected location based on (1) where the group should be located, and (2) the key's epected intra-group index.
 - Provides a single document-level autofix that reorders blocks into the correct order.
 - **Comments policy in autofix**: line comments immediately above a key **stick with that key**; top-of-file header comments are preserved at the very top.
 
 **Configuration**
 
-```js
-{
-  metaKeys?: string[];        // default: META_KEYS (set to [`_meta`]); order here defines the meta block order
-  defaultLocale?: string;     // default: DEFAULT_LOCALE (set to 'en')
-  allowedLocales?: string[];  // default: ALL_LOCALE_CODES (used to identify locale keys)
-}
-```
+- **`metaKeys`** (`string[]`, optional): Defines which keys are treated as metadata blocks. The order of keys in this array determines the enforced order of metadata blocks.
+
+  - **Default:** `["_meta"]`
+
+- **`defaultLocale`** (`string`, optional): Specifies the default locale to be placed first in the locale order.
+
+  - **Valid values:** Any 2-letter locale code (e.g., `"en"`, `"fr"`).
+  - **Default:** `"en"`
+
+- **`allowedLocales`** (`string[]`, optional): Restricts which locale codes are recognized and ordered. Keys outside this list are ignored.
+  - **Valid values:** Any 2-letter locale codes (e.g., `"en"`, `"fr"`).
+  - **Default:** All known locale codes.
 
 **Examples**
 _Before (unsorted)_
@@ -292,8 +267,6 @@ notes: …
 - Sorting within groups uses `Intl.Collator('en', { sensitivity: 'base', numeric: true })` for human-friendly ordering.
 - Works only at the **root mapping** level; it does not reorder nested mappings.
 
-**Status**: Stable.
-
 ---
 
 ### `i18n-yaml/deep-keys-parity`
@@ -308,7 +281,9 @@ notes: …
 
 **Configuration**
 
-- **`singleComprehensiveLocale`** (string, optional): Treat this locale as the single source of truth. When set, the rule only checks that this locale contains all keys present in other locales. Missing keys are only reported for the specified locale, and no reports are generated for the others. If provided, the value must be a 2-letter locale code; e.g., 'en', 'fr'.
+- **`singleComprehensiveLocale`** (`string`, optional): Treat this locale as the single source of truth. When set, the rule only checks that this locale contains all keys present in other locales. Missing keys are only reported for the specified locale, and no reports are generated for the others.
+  - **Valid values:** Any 2-letter locale code (e.g., `"en"`, `"fr"`).
+  - **Default:** Not set.
 
 **Examples**
 
@@ -352,9 +327,6 @@ fr:
 **Notes**
 
 - Paths are represented by joining segments with `"."` (e.g., `en.title`). This can become **ambiguous if your keys themselves contain dots**.  
-  👉 Recommended: also enable case-enforcing rules from [`eslint-plugin-yml`](https://ota-meshi.github.io/eslint-plugin-yml/)  
-  (`yml/key-name-casing`) or add project-specific rules to forbid dots in keys.
+  👉 Recommended: also enable case-enforcing rules from [`eslint-plugin-yml`](https://ota-meshi.github.io/eslint-plugin-yml/) (`yml/key-name-casing`) or add project-specific rules to forbid dots in keys.
 - The rule does **not autofix**, since inserting translations automatically is unsafe.
-- Performance is optimized using **set-based maps**, making it practical even for large YAMLs with hundreds of keys.
-
-**Status**: Stable.
+- Performance is optimized using **DFS and set-based maps**, making it practical even for large YAMLs with hundreds of keys.

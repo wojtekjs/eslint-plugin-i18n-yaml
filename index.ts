@@ -5,6 +5,7 @@ export const PLUGIN_NAME = "i18n-yaml";
 
 export const rules = {};
 
+// TODO update the Configuration sections of the README to follow the model of deep-key-parity (bullets with explanations)
 export const configs = {
   // Enables the plugin for *.i18n.yaml files with sane defaults.
   "flat/recommended": [
@@ -18,17 +19,6 @@ export const configs = {
       plugins: {
         // This states the plugins namespace. It needs to be listed under this in the project its being used
         [PLUGIN_NAME]: { rules },
-      },
-      settings: {
-        [PLUGIN_NAME]: {
-          defaultLocale: "en",
-          locales: ["en", "fr", "de"],
-          allowedMetaKeys: ["_meta"],
-          maxDepth: 2,
-          allowNonStringLeaves: false,
-          placeholderRegex: "\\{([a-zA-Z0-9_]+)\\}",
-          escapeDoubleBrace: true,
-        },
       },
       // Rules are namespaced. They must always start with the name assigned under `plugins`, followed by a slash and then the rule name
       // (Only core/default ESLint rules do not start with a slash-prefixed namespace)

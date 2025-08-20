@@ -14,7 +14,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     type: "problem",
     docs: {
       description: "Enforce key parity between locales in an i18n YAML file.",
-      url: "",
+      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamldeep-keys-parity",
     },
     messages: {
       deepKeyDisparity:
@@ -37,56 +37,20 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     const options = (context.options[0] ?? {}) as RuleOptions;
     const singleComprehensiveLocale = options.singleComprehensiveLocale ?? null;
 
+    const EMPTY_PATH_SET = new Set<string>();
+    const EMPTY_LOCALE_SET = new Set<LocaleCode>();
+
     return {
       YAMLDocument(doc: AST.YAMLDocument) {
         if (!isYamlMapping(doc.content)) return;
 
-        // TODO modify the 2 loops below around allDeepKeys to be just one. the gatherKeys should build and return the 2 maps and the allRelPaths set
-        // * doing this ^ means the part inside the 2nd for in loop needs to happen inside of where i am currently pushing keys into the `gatheredKeys` array inside gatherKeys()
-        // * it also means giving gatherKeys new arguments so it can recurse over this properly
-
-        // Gathering all keys from locale on down, excluding root-level locales themselves
-        let allDeepKeys: DeepKey[] = [];
-        for (const localeBlock of doc.content.pairs) {
-          if (!localeBlock.key || !localeBlock.value) continue;
-          const stringLocaleKey = String(getStaticYAMLValue(localeBlock.key));
-          if (!isLocaleCode(stringLocaleKey)) continue;
-
-          // this mutates the allDeepKeys array in place
-          gatherKeys(localeBlock.value, allDeepKeys, stringLocaleKey, [
-            stringLocaleKey,
-          ]);
-        }
-
-        // Creating set-based maps for O(1)/O(k) compute speeds - important on large YAMLs with hundreds of keys
-        const localeToPathsMap = new Map<LocaleCode, Set<string>>();
-        const pathsToLocaleMap = new Map<string, Set<LocaleCode>>();
-        const allRelPaths = new Set<string>();
-        const allLocales = new Set<LocaleCode>();
-        for (const deepKey of allDeepKeys) {
-          const loc = deepKey.locale;
-          // Stringifying path to avoid reliance on dots in th path and ensure each path is unique
-          const keyRelId = JSON.stringify(deepKey.keyPath.slice(1));
-
-          const locSet = localeToPathsMap.get(loc) ?? new Set<string>();
-          locSet.add(keyRelId);
-          localeToPathsMap.set(loc, locSet);
-
-          const rpSet = pathsToLocaleMap.get(keyRelId) ?? new Set<LocaleCode>();
-          rpSet.add(loc);
-          pathsToLocaleMap.set(keyRelId, rpSet);
-
-          allRelPaths.add(keyRelId);
-          allLocales.add(loc);
-        }
+        const { pathsToLocaleMap, localeToPathsMap, allRelPaths, allLocales } =
+          buildIndexes(doc.content);
 
         if (allLocales.size < 2) return; // file does't contain enough locales for comparison, iteration is wasted compute cost
 
         // Check and report loop
         const allRelPathsArray = Array.from(allRelPaths);
-        const EMPTY_PATH_SET = new Set<string>();
-        const EMPTY_LOCALE_SET = new Set<LocaleCode>();
-
         const reportedExpectedPaths = new Set<string>();
         for (const localeBlock of doc.content.pairs) {
           if (!localeBlock.key) continue;
@@ -145,42 +109,80 @@ export default rule;
 
 type Scope = "key" | "nested key";
 
-type DeepKey = {
-  key: string;
-  locale: LocaleCode;
-  keyPath: string[];
+type Indexes = {
+  localeToPathsMap: Map<LocaleCode, Set<string>>;
+  pathsToLocaleMap: Map<string, Set<LocaleCode>>;
+  allRelPaths: Set<string>;
+  allLocales: Set<LocaleCode>;
 };
 
-const gatherKeys = (
+const buildIndexes = (docContent: AST.YAMLMapping): Indexes => {
+  // Creating set-based maps for O(1)/O(k) compute speeds - important on large YAMLs with hundreds of keys
+  const init: Indexes = {
+    localeToPathsMap: new Map<LocaleCode, Set<string>>(),
+    pathsToLocaleMap: new Map<string, Set<LocaleCode>>(),
+    allRelPaths: new Set<string>(),
+    allLocales: new Set<LocaleCode>(),
+  };
+
+  return docContent.pairs.reduce<Indexes>((acc, localeBlock) => {
+    if (!localeBlock.key || !localeBlock.value) return acc;
+    const stringLocaleKey = String(getStaticYAMLValue(localeBlock.key));
+    if (!isLocaleCode(stringLocaleKey)) return acc;
+
+    // mutates acc objects
+    keyDfs(localeBlock.value, stringLocaleKey, [stringLocaleKey], acc);
+    return acc;
+  }, init);
+};
+
+const mapGetSet = <K, V>(map: Map<K, Set<V>>, key: K): Set<V> => {
+  let s = map.get(key);
+  if (!s) {
+    s = new Set<V>();
+    map.set(key, s);
+  }
+  return s;
+};
+
+const keyDfs = (
   currNode: AST.YAMLNode,
-  gatheredKeys: DeepKey[],
   locale: LocaleCode,
-  currentPath: string[]
-): DeepKey[] => {
+  currentPath: string[],
+  ctx: Indexes
+): void => {
+  const updateIndexes = (
+    locale: LocaleCode,
+    keyPathSegments: string[]
+  ): void => {
+    // Stringifying path to avoid reliance on dots in the path and ensure each path is unique
+    const keyRelPathId = JSON.stringify(keyPathSegments);
+    mapGetSet(ctx.localeToPathsMap, locale).add(keyRelPathId);
+    mapGetSet(ctx.pathsToLocaleMap, keyRelPathId).add(locale);
+    ctx.allRelPaths.add(keyRelPathId);
+    ctx.allLocales.add(locale);
+  };
+
   // Ignores AST.Anchor and AST.Alias
   if (isYamlMapping(currNode)) {
     for (const pair of currNode.pairs) {
-      // Add key to running count
       if (!pair.key) continue;
       const keyString = String(getStaticYAMLValue(pair.key));
-      const updatedPath = [...currentPath, keyString];
-      gatheredKeys.push({
-        key: keyString,
-        locale: locale,
-        keyPath: updatedPath,
-      });
+      // preferring push/pop pattern over spreading into a new const to avoid wasteful memory alloc
+      currentPath.push(keyString);
 
-      // Evaluate whether to continue recursing
-      const pairValue = pair.value;
-      if (!pairValue) continue;
+      updateIndexes(locale, currentPath.slice(1));
 
-      if (isYamlMapping(pairValue)) {
-        gatherKeys(pairValue, gatheredKeys, locale, updatedPath);
-      } else if (isYamlSequence(pairValue)) {
-        for (const item of pairValue.entries) {
-          if (!item) continue;
-          gatherKeys(item, gatheredKeys, locale, updatedPath);
+      try {
+        // Evaluate whether to continue recursing
+        const pV = pair.value;
+        if (pV && (isYamlMapping(pV) || isYamlSequence(pV))) {
+          keyDfs(pV, locale, currentPath, ctx);
         }
+        // try/finally pattern ensures path array has no leftover elements even if a throw/continue occurs inside the recursion
+      } finally {
+        // removing the current key once it and all it's (potential) children were walked through, to make place for the next key
+        currentPath.pop();
       }
     }
     // coverage for sequences for cases like: [ { a: 1 }, { b: 2 } ]
@@ -188,8 +190,7 @@ const gatherKeys = (
     // .entries gives access to the list items so we can iterate over them
     for (const item of currNode.entries) {
       if (!item) continue;
-      gatherKeys(item, gatheredKeys, locale, currentPath);
+      keyDfs(item, locale, currentPath, ctx);
     }
   }
-  return gatheredKeys;
 };
