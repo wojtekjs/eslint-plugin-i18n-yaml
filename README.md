@@ -19,7 +19,8 @@ This package is **not published to npm** yet. Use one of the following approache
 
 **1) Git dependency (recommended)**
 
-```jsonc title="package.json"
+```jsonc
+// package.json
 {
   "devDependencies": {
     "eslint-plugin-i18n-yaml": "git+ssh://git@github.com/YOUR_ORG/eslint-plugin-i18n-yaml.git#main"
