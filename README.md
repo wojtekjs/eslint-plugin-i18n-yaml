@@ -337,3 +337,63 @@ fr:
   👉 Recommended: also enable case-enforcing rules from [`eslint-plugin-yml`](https://ota-meshi.github.io/eslint-plugin-yml/) (`yml/key-name-casing`) or add project-specific rules to forbid dots in keys.
 - The rule does **not autofix**, since inserting translations automatically is unsafe.
 - Performance is optimized using **DFS and set-based maps**, making it practical even for large YAMLs with hundreds of keys.
+
+---
+
+### `i18n-yaml/placeholder-parity`
+
+### `i18n-yaml/placeholder-parity`
+
+**What it is**: Ensures that **reciprocal keys across locales use the same set of placeholders** (e.g., `{count}`, `{name}`) regardless of order.
+
+**What it enforces**
+
+- Traverses all locales and collects placeholders from **leaf string values** (scalars).
+- Placeholders are detected with this pattern: `{identifier}` where `identifier` matches `[A-Za-z_][A-Za-z0-9_]*`.
+  - Escaped braces (e.g., `\{name}`) are **ignored**.
+  - Double braces (e.g., `{{name}}`) are **ignored**.
+  - Braces containing multiple space-separated values (e.g., `{{name surname}}`) are **ignored**.
+- The order of placeholders in each scalar is irrelevant. Duplicate placeholders are ignored.
+- Reports when **more than one distinct placeholder set** appears across locales for the same key path.
+
+**Configuration**
+
+None.
+
+**Examples**
+
+_Consistent placeholder usage ✅_
+
+```yaml
+en:
+  inbox:
+    summary: "You have {count} new messages"
+fr:
+  inbox:
+    summary: "Vous avez {count} nouveaux messages"
+es:
+  inbox:
+    summary: "Tienes {count} mensajes nuevos"
+```
+
+_Inonsistent placeholder usage ❌_
+
+```yaml
+en:
+  inbox:
+    summary: "You have {count} new messages" # 1 placeholder
+fr:
+  inbox:
+    summary: "Vous avez {count} nouveaux messages pour {name}" # 2 placeholders
+es:
+  inbox:
+    summary: "Tienes mensajes nuevos" # no placeholders
+```
+
+> **Error message**:  
+> `Placeholder usage for key 'summary' is not consistent across locales (3 variants) • en → {count}; fr → {count}, {name}; es → ∅
+
+**Notes**
+
+- Array-based discrepancies are supported. Numeric indices are appended to the last named segment. E.g., `items[1][0]` for the first element of the second array inside a mapping with the key `items`.
+- Variant groups in the error message appear in descending order by number of locales. Within each variant, locales and placeholders are arranged alphabetically.
