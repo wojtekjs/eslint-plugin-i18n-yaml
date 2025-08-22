@@ -12,7 +12,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     docs: {
       description:
         "Enforce usage of identical placeholders in reciprocal keys across locales.",
-      url: "",
+      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlplaceholder-parity",
     },
     schema: [],
     messages: {

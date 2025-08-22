@@ -342,9 +342,7 @@ fr:
 
 ### `i18n-yaml/placeholder-parity`
 
-### `i18n-yaml/placeholder-parity`
-
-**What it is**: Ensures that **reciprocal keys across locales use the same set of placeholders** (e.g., `{count}`, `{name}`) regardless of order.
+**What it is**: Ensures that **reciprocal keys across locales use the same set of placeholders** (e.g., `{count}`, `{name}`).
 
 **What it enforces**
 
@@ -352,7 +350,7 @@ fr:
 - Placeholders are detected with this pattern: `{identifier}` where `identifier` matches `[A-Za-z_][A-Za-z0-9_]*`.
   - Escaped braces (e.g., `\{name}`) are **ignored**.
   - Double braces (e.g., `{{name}}`) are **ignored**.
-  - Braces containing multiple space-separated values (e.g., `{{name surname}}`) are **ignored**.
+  - Braces containing space/comma/otherwise-separated values (e.g., `{{name surname}}`) are **ignored**.
 - The order of placeholders in each scalar is irrelevant. Duplicate placeholders are ignored.
 - Reports when **more than one distinct placeholder set** appears across locales for the same key path.
 
@@ -379,6 +377,7 @@ es:
 _Inonsistent placeholder usage ❌_
 
 ```yaml
+# ⚠️ Placeholder usage for key 'summary' is not consistent across locales (3 variants) • en → {count}; fr → {count}, {name}; es → ∅
 en:
   inbox:
     summary: "You have {count} new messages" # 1 placeholder
@@ -390,8 +389,7 @@ es:
     summary: "Tienes mensajes nuevos" # no placeholders
 ```
 
-> **Error message**:  
-> `Placeholder usage for key 'summary' is not consistent across locales (3 variants) • en → {count}; fr → {count}, {name}; es → ∅
+> The error message is reported on every leaf.
 
 **Notes**
 
