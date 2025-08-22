@@ -5,7 +5,6 @@ export const PLUGIN_NAME = "i18n-yaml";
 
 export const rules = {};
 
-// TODO update the Configuration sections of the README to follow the model of deep-key-parity (bullets with explanations)
 export const configs = {
   // Enables the plugin for *.i18n.yaml files with sane defaults.
   "flat/recommended": [

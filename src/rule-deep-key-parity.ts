@@ -25,7 +25,11 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       {
         type: "object",
         properties: {
-          singleComprehensiveLocale: { type: "string" },
+          singleComprehensiveLocale: {
+            type: "string",
+            minLength: 2,
+            maxLength: 2,
+          },
         },
         additionalProperties: false,
       },
