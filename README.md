@@ -15,8 +15,6 @@ Custom ESLint rules for high-quality, consistent i18n YAML files.
   - [`i18n-yaml/key-order`](#i18n-yamlkey-order)
   - [`i18n-yaml/deep-keys-parity`](#i18n-yamldeep-keys-parity)
   - [`i18n-yaml/placeholder-parity`](#i18n-yamlplaceholder-parity)
-  - [`i18n-yaml/value-kind`](#i18n-yamlvalue-kind)
-- [🧩 (Optional) Sections I can add — your call](#-optional-sections-i-can-add--your-call)
 
 ## ✨ Feature set
 
