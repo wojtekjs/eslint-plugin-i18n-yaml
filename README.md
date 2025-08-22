@@ -1,6 +1,22 @@
 # eslint-plugin-i18n-yaml
 
-Custom ESLint rules for i18n YAML files. Keep locale files consistent by enforcing a default locale, constraining root keys, limiting nesting depth, and keeping keys sorted. (Parity checks for deep keys and placeholders are planned.)
+Custom ESLint rules for high-quality, consistent i18n YAML files.
+
+## Table of Contents
+
+- [✨ Feature set](#-feature-set)
+- [🔧 Setup & installation (current state)](#-setup--installation-current-state)
+  - [Peer requirements](#peer-requirements)
+  - [Flat Config — Quick start](#flat-config--quick-start)
+- [📏 Rules](#-rules)
+  - [`i18n-yaml/default-locale-present`](#i18n-yamldefault-locale-present)
+  - [`i18n-yaml/allowed-root-locales`](#i18n-yamlallowed-root-locales)
+  - [`i18n-yaml/max-depth`](#i18n-yamlmax-depth)
+  - [`i18n-yaml/key-order`](#i18n-yamlkey-order)
+  - [`i18n-yaml/deep-keys-parity`](#i18n-yamldeep-keys-parity)
+  - [`i18n-yaml/placeholder-parity`](#i18n-yamlplaceholder-parity)
+  - [`i18n-yaml/value-kind`](#i18n-yamlvalue-kind)
+- [🧩 (Optional) Sections I can add — your call](#-optional-sections-i-can-add--your-call)
 
 ## ✨ Feature set
 
@@ -9,7 +25,7 @@ Custom ESLint rules for i18n YAML files. Keep locale files consistent by enforci
 - Enforce a maximum nesting depth under each locale.
 - Keep header keys and locale blocks in a consistent, alphabetical order (autofix).
 - Verify deep key parity across all present locales (or optionally, only against a single locale).
-- _(Planned)_ Verify placeholder parity across locales for leaf strings.
+- Verify placeholder parity across locales for leaf strings.
 
 ---
 

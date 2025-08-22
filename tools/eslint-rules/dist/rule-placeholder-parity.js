@@ -5,7 +5,7 @@ const rule = {
         type: "problem",
         docs: {
             description: "Enforce usage of identical placeholders in reciprocal keys across locales.",
-            url: "",
+            url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlplaceholder-parity",
         },
         schema: [],
         messages: {
@@ -79,23 +79,26 @@ const formatUsageListMessage = (usageMap) => {
     return msgArr.map((m) => m.displayMsg).join("; ");
 };
 const formatDisplayKey = (fullPath) => {
-    const rel = fullPath.slice(1); // strip locale
-    if (rel.length === 0)
+    const relPath = fullPath.slice(1); // strip locale
+    if (relPath.length === 0)
         return "";
     // collect trailing numeric indices
-    let i = rel.length - 1;
+    let i = relPath.length - 1;
     const indices = [];
-    while (i >= 0 && /^\d+$/.test(rel[i])) {
-        indices.unshift(rel[i]);
+    // i >= 0 AND current indexed value is purely numeric (i.e., an array index)
+    while (i >= 0 && /^\d+$/.test(relPath[i])) {
+        indices.unshift(relPath[i]);
         i--;
     }
-    const base = rel[i];
+    const base = relPath[i];
     if (base !== undefined) {
         return base + indices.map((n) => `[${n}]`).join("");
     }
     // array directly under the locale (no named base key)
     // e.g. ["en","0","1"] -> "[0][1]"
-    return indices.length ? `[${indices.join("][")}]` : rel[rel.length - 1];
+    return indices.length
+        ? `[${indices.join("][")}]`
+        : relPath[relPath.length - 1];
 };
 const updateKppMap = (kppMap, loc, path, phs, locale) => {
     const strId = JSON.stringify(path.slice(1)); // removing locale
