@@ -188,3 +188,5 @@ export const ALL_LOCALE_CODES_SET = new Set(ALL_LOCALE_CODES);
 export const META_KEYS = ["_meta", "_component"];
 export const DEFAULT_LOCALE = "en";
 export const MAX_NESTING_DEPTH = 2;
+// Detects `{name}` and the inner `{name}` in `{{name}} or in {hey {name}}`. allows _ and - except `-` as the last char
+export const PH_RE = /\{([A-Za-z_](?:[A-Za-z0-9_-]*[A-Za-z0-9_])?)\}/g;

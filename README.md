@@ -362,9 +362,8 @@ fr:
 
 - Traverses all locales and collects placeholders from **leaf string values** (scalars).
 - Placeholders are detected with this pattern: `{identifier}` where `identifier` matches `[A-Za-z_][A-Za-z0-9_]*`.
-  - Escaped braces (e.g., `\{name}`) are **ignored**.
-  - Double braces (e.g., `{{name}}`) are **ignored**.
-  - Braces containing space/comma/otherwise-separated values (e.g., `{{name surname}}`) are **ignored**.
+  - Double braces (e.g., `{{name}}`) are treated as a placeholder inside literal, renderable braces.
+  - Braces containing space/comma/otherwise-separated values (e.g., `{name surname}`) are **ignored**.
 - The order of placeholders in each scalar is irrelevant. Duplicate placeholders are ignored.
 - Reports when **more than one distinct placeholder set** appears across locales for the same key path.
 

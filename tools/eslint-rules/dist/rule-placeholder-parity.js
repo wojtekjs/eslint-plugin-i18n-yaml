@@ -1,4 +1,5 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
+import { PH_RE } from "./constants.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
 const rule = {
     meta: {
@@ -158,5 +159,3 @@ const dfsPlaceholders = (node, currPath, kppMap) => {
         }
     }
 };
-// regex to find placeholders marked with curly braces, and allowing lookback for escaped braces
-const PH_RE = /(?<!\\)(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)\}(?!\})/g;

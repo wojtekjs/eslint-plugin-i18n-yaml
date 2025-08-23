@@ -1,6 +1,6 @@
 import { TSESLint } from "@typescript-eslint/utils";
 import { getStaticYAMLValue, type AST } from "yaml-eslint-parser";
-import { LocaleCode } from "./constants.js";
+import { LocaleCode, PH_RE } from "./constants.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
 
 type Options = [];
@@ -181,9 +181,6 @@ const dfsPlaceholders = (
     }
   }
 };
-
-// regex to find placeholders marked with curly braces, and allowing lookback for escaped braces
-const PH_RE = /(?<!\\)(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)\}(?!\})/g;
 
 /**
  * Maps a stringified array of placeholder identifiers (e.g. ["{count}", "{name}"])
