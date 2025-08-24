@@ -1,28 +1,18 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
 import { isYamlMapping, isYamlSequence } from "./utils.js";
-const MESSAGE_IDS = [
-    "forbiddenWhitespace", // no whitespace allowed inside a placeholder
-    "invalidCasing", // depending on what casing is selected. default is camelCase
-    "invalidFirstCharacter", // cannot start with a non alpha char
-    "forbiddenReservedKey", // ban keys like `prototype`, `hasOwnProperty` because they can't be properly used when formatting the message
-    "forbiddenInvisibleChars", // forbid zero-width/invisible/bidi control chars (e.g., \u200B, \u202A–\u202E) since they break matching
-    "invalidCharset", // ASCII letters & digits only (no punctuation, emojis, etc.)
-    "emptyPlaceholder", // forbid {}
-];
-const DEFAULT_CHECKS = Object.fromEntries(MESSAGE_IDS.map((id) => [id, true]));
 const rule = {
     meta: {
         type: "problem",
         docs: {
             description: "Enforce placeholder formatting rules in i18n YAML files.",
-            url: "",
+            url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlplaceholder-format",
         },
         schema: [
             {
                 type: "object",
                 properties: {
                     casing: { type: "string", default: "camelCase" },
-                    allowICU: { type: "boolean", default: false },
+                    mode: { type: "string", default: "standard" },
                     checks: {
                         type: "object",
                         properties: {
@@ -45,18 +35,17 @@ const rule = {
             invalidFirstCharacter: "Placeholders must start with a letter. '{{raw}}' is invalid",
             forbiddenReservedKey: "Placeholder '{{raw}}' is a reserved key and cannot be used (e.g., `constructor`, `hasOwnProperty`)",
             forbiddenInvisibleChars: "Placeholder '{{raw}}' contains disallowed invisible or control characters",
-            invalidCharset: "Placeholder '{{raw}}' contains invalid characters. Only letters, digits, '_' and '-' are allowed",
+            invalidCharset: "Placeholder '{{raw}}' contains invalid characters. Only ASCII letters, digits, '_' and '-' are allowed",
             emptyPlaceholder: "Empty placeholders '{}' are not allowed",
         },
     },
     defaultOptions: [],
-    // TODO update to allow ICU. see gpt notes in notion for details
     create(context) {
         const options = (context.options[0] ?? {});
         const opts = {
             casing: options.casing ?? "camelCase",
-            allowICU: options.allowICU ?? false,
-            checks: options.checks ?? DEFAULT_CHECKS,
+            mode: options.mode ?? "standard",
+            checks: { ...DEFAULT_CHECKS, ...options.checks },
         };
         return {
             YAMLDocument(doc) {
@@ -72,55 +61,13 @@ const rule = {
     },
 };
 export default rule;
-const REGEX_CHECKS = {
-    // Zero-width / Bidi controls (expand if policy requires more)
-    forbiddenInvisibleChars: /[\u200B-\u200D\uFEFF\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/,
-    // Any whitespace in the inner token
-    forbiddenWhitespace: /\s/,
-    // Contains invalid chars (anything not ASCII letter/digit or '_'/'-' or spaces (covered by whitespace rule))
-    invalidCharset: /[^A-Za-z0-9_\-\s]/,
-    // First char is not a letter
-    invalidFirstCharacter: /^[^A-Za-z]/,
-};
-const CASING_REGEXES = {
-    camelCase: /^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)*$/,
-    "kebab-case": /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/,
-    PascalCase: /^[A-Z][a-z0-9]*(?:[A-Z][a-z0-9]*)*$/,
-    snake_case: /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
-    SCREAMING_CASE: /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/,
-};
-const TOLERANT_PH_FINDER = /(?!\{\{)\{([^}]*)\}/g;
-const RESERVED_PLACEHOLDER_KEYS = new Set([
-    // Prototype pollution / object meta
-    "__proto__",
-    "prototype",
-    "constructor",
-    // Object.prototype methods
-    "hasOwnProperty",
-    "isPrototypeOf",
-    "propertyIsEnumerable",
-    "toLocaleString",
-    "toString",
-    "valueOf",
-    // Function / constructor internals
-    "apply",
-    "bind",
-    "call",
-    "arguments",
-    "caller",
-    // Other dangerous/ambiguous ones
-    "__defineGetter__",
-    "__defineSetter__",
-    "__lookupGetter__",
-    "__lookupSetter__",
-    "eval",
-]);
+// * --------- Logic
 const dfsPhs = (node, opts, ctx) => {
     if (node.type === "YAMLScalar") {
         const v = getStaticYAMLValue(node);
         if (typeof v !== "string")
             return;
-        const phs = getPlaceholdersFromScalar(node, ctx);
+        const phs = getPlaceholdersFromScalar(node, opts.mode, ctx);
         for (const ph of phs) {
             const checks = checkPh(ph.innerPh, opts);
             if (!checks.report)
@@ -143,22 +90,48 @@ const dfsPhs = (node, opts, ctx) => {
         }
     }
 };
-const getPlaceholdersFromScalar = (scalar, ctx) => {
+const findIcuSpans = (text) => {
+    const spans = [];
+    for (const m of text.matchAll(PH_FINDER_ICU_ON)) {
+        // ICU heads by definition end with a comma
+        if (!m[0].endsWith(","))
+            continue;
+        let i = (m.index ?? 0) + m[0].length; // scan after the comma
+        let depth = 1; // tracks the balance of opening/closing curly braces. starts at 1 since we opened at m.index which is a {
+        // once depth === 0, we've reached the end of a balanced icu span - all opened braces got closed
+        while (i < text.length && depth > 0) {
+            const ch = text[i++];
+            if (ch === "{")
+                depth++;
+            else if (ch === "}")
+                depth--;
+        }
+        spans.push([m.index ?? 0, i]); // [start at '{', end just after matching '}']
+    }
+    return spans;
+};
+const insideAnyIcuBody = (pos, spans) => spans.some(([s, e]) => pos > s && pos < e); // strict: head at pos==s is allowed
+const getPlaceholdersFromScalar = (scalar, mode, ctx) => {
+    const icuOn = mode === "icu";
     const src = ctx.sourceCode;
     const [nodeStart, nodeEnd] = scalar.range;
     const raw = src.text.slice(nodeStart, nodeEnd);
+    const RE = icuOn ? PH_FINDER_ICU_ON : PH_FINDER_ICU_OFF;
+    const icuSpans = icuOn ? findIcuSpans(raw) : []; // only needed when ICU is ON
     const phs = [];
-    // we're iterating over a RegExpMatchArray below
-    for (const m of raw.matchAll(TOLERANT_PH_FINDER)) {
-        const fullPh = m[0];
-        const idx = m.index; // start offset inside the string we ran the regex on (`raw` here)
-        const absStart = nodeStart + idx;
-        const absEnd = absStart + fullPh.length;
+    for (const m of raw.matchAll(RE)) {
+        const fullIdx = m.index; // start of the match in `raw`
+        const innerPh = m[1]; // the token / ICU arg (no braces)
+        // ICU mode: skip past any tokens that start inside any ICU body (but keep header arg names)
+        if (icuOn && insideAnyIcuBody(fullIdx, icuSpans))
+            continue;
+        // start of captured name inside the match (skips "{" and any spaces)
+        const startInMatch = m[0].indexOf(innerPh);
+        const absStart = nodeStart + fullIdx + (icuOn ? startInMatch : 0);
+        const absEnd = absStart + (icuOn ? innerPh.length : m[0].length);
         phs.push({
-            fullPh,
-            innerPh: m[1],
-            indexInRaw: idx,
-            absRange: [absStart, absEnd],
+            innerPh,
+            indexInRaw: fullIdx,
             loc: {
                 start: src.getLocFromIndex(absStart),
                 end: src.getLocFromIndex(absEnd),
@@ -202,3 +175,64 @@ const isMessageId = (maybeMsgId) => {
     return (typeof maybeMsgId === "string" &&
         MESSAGE_IDS.includes(maybeMsgId));
 };
+// * --------- Constants
+const REGEX_CHECKS = {
+    // Zero-width / Bidi controls (expand if policy requires more)
+    forbiddenInvisibleChars: /[\u200B-\u200D\uFEFF\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/,
+    // Any whitespace in the inner token
+    forbiddenWhitespace: /\s/,
+    // Contains invalid chars (anything not ASCII letter/digit or '_'/'-' or spaces (covered by whitespace rule))
+    invalidCharset: /[^A-Za-z0-9_\-\s]/,
+    // First char is not a letter
+    invalidFirstCharacter: /^[^A-Za-z]/,
+};
+/*
+as a secondary effect, these forbid spaces, non-alpha starting chars, usage of symbols other than _ or -
+this is a standard industry expectation so it has been left in here
+*/
+const CASING_REGEXES = {
+    camelCase: /^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)*$/,
+    "kebab-case": /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/,
+    PascalCase: /^[A-Z][a-z0-9]*(?:[A-Z][a-z0-9]*)*$/,
+    snake_case: /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
+    SCREAMING_CASE: /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/,
+};
+// find and return everything between a set of curly braces
+const PH_FINDER_ICU_OFF = /(?!\{\{)\{([^}]*)\}/g;
+// ignore {{placeholder}} completely since ICU doesn't permit it
+const PH_FINDER_ICU_ON = /(?<!\{)\{(?!\{)\s*([^,}]+?)\s*(?:,|})/g;
+const RESERVED_PLACEHOLDER_KEYS = new Set([
+    // Prototype pollution / object meta
+    "__proto__",
+    "prototype",
+    "constructor",
+    // Object.prototype methods
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+    "toString",
+    "valueOf",
+    // Function / constructor internals
+    "apply",
+    "bind",
+    "call",
+    "arguments",
+    "caller",
+    // Other dangerous/ambiguous ones
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+    "eval",
+]);
+const MESSAGE_IDS = [
+    "forbiddenWhitespace",
+    "invalidCasing",
+    "invalidFirstCharacter",
+    "forbiddenReservedKey",
+    "forbiddenInvisibleChars",
+    "invalidCharset",
+    "emptyPlaceholder",
+];
+const DEFAULT_CHECKS = Object.fromEntries(MESSAGE_IDS.map((id) => [id, true]));

@@ -4,7 +4,7 @@ import { isYamlMapping, isYamlSequence } from "./utils.js";
 
 type RuleOptions = {
   casing?: Casing;
-  allowICU?: boolean;
+  mode?: ParsingMode;
   checks?: Partial<Record<MessageIds, boolean>>;
 };
 
@@ -15,14 +15,14 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     type: "problem",
     docs: {
       description: "Enforce placeholder formatting rules in i18n YAML files.",
-      url: "",
+      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlplaceholder-format",
     },
     schema: [
       {
         type: "object",
         properties: {
           casing: { type: "string", default: "camelCase" },
-          allowICU: { type: "boolean", default: false },
+          mode: { type: "string", default: "standard" },
           checks: {
             type: "object",
             properties: {
@@ -51,20 +51,18 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       forbiddenInvisibleChars:
         "Placeholder '{{raw}}' contains disallowed invisible or control characters",
       invalidCharset:
-        "Placeholder '{{raw}}' contains invalid characters. Only letters, digits, '_' and '-' are allowed",
+        "Placeholder '{{raw}}' contains invalid characters. Only ASCII letters, digits, '_' and '-' are allowed",
       emptyPlaceholder: "Empty placeholders '{}' are not allowed",
     },
   },
   defaultOptions: [],
 
-  // TODO update to allow ICU. see gpt notes in notion for details
-
   create(context) {
     const options = (context.options[0] ?? {}) as RuleOptions;
     const opts = {
       casing: options.casing ?? "camelCase",
-      allowICU: options.allowICU ?? false,
-      checks: options.checks ?? DEFAULT_CHECKS,
+      mode: options.mode ?? "standard",
+      checks: { ...DEFAULT_CHECKS, ...options.checks },
     } as Required<RuleOptions>;
     return {
       YAMLDocument(doc: AST.YAMLDocument) {
@@ -91,7 +89,7 @@ const dfsPhs = (
     const v = getStaticYAMLValue(node);
     if (typeof v !== "string") return;
 
-    const phs = getPlaceholdersFromScalar(node, ctx);
+    const phs = getPlaceholdersFromScalar(node, opts.mode, ctx);
     for (const ph of phs) {
       const checks = checkPh(ph.innerPh, opts);
       if (!checks.report) continue;
@@ -110,27 +108,57 @@ const dfsPhs = (
   }
 };
 
+const findIcuSpans = (text: string): Span[] => {
+  const spans: Span[] = [];
+  for (const m of text.matchAll(PH_FINDER_ICU_ON)) {
+    // ICU heads by definition end with a comma
+    if (!m[0].endsWith(",")) continue;
+
+    let i = (m.index ?? 0) + m[0].length; // scan after the comma
+    let depth = 1; // tracks the balance of opening/closing curly braces. starts at 1 since we opened at m.index which is a {
+    // once depth === 0, we've reached the end of a balanced icu span - all opened braces got closed
+    while (i < text.length && depth > 0) {
+      const ch = text[i++];
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+    }
+    spans.push([m.index ?? 0, i]); // [start at '{', end just after matching '}']
+  }
+  return spans;
+};
+
+const insideAnyIcuBody = (pos: number, spans: Span[]) =>
+  spans.some(([s, e]) => pos > s && pos < e); // strict: head at pos==s is allowed
+
 const getPlaceholdersFromScalar = (
   scalar: AST.YAMLScalar,
+  mode: ParsingMode,
   ctx: Context
 ): PlaceholderInfo[] => {
+  const icuOn = mode === "icu";
   const src = ctx.sourceCode;
   const [nodeStart, nodeEnd] = scalar.range;
   const raw = src.text.slice(nodeStart, nodeEnd);
 
+  const RE = icuOn ? PH_FINDER_ICU_ON : PH_FINDER_ICU_OFF;
+  const icuSpans = icuOn ? findIcuSpans(raw) : []; // only needed when ICU is ON
+
   const phs: PlaceholderInfo[] = [];
-  // we're iterating over a RegExpMatchArray below
-  for (const m of raw.matchAll(TOLERANT_PH_FINDER)) {
-    const fullPh = m[0];
-    const idx = m.index!; // start offset inside the string we ran the regex on (`raw` here)
-    const absStart = nodeStart + idx;
-    const absEnd = absStart + fullPh.length;
+  for (const m of raw.matchAll(RE)) {
+    const fullIdx = m.index!; // start of the match in `raw`
+    const innerPh = m[1]; // the token / ICU arg (no braces)
+
+    // ICU mode: skip past any tokens that start inside any ICU body (but keep header arg names)
+    if (icuOn && insideAnyIcuBody(fullIdx, icuSpans)) continue;
+
+    // start of captured name inside the match (skips "{" and any spaces)
+    const startInMatch = m[0].indexOf(innerPh);
+    const absStart = nodeStart + fullIdx + (icuOn ? startInMatch : 0);
+    const absEnd = absStart + (icuOn ? innerPh.length : m[0].length);
 
     phs.push({
-      fullPh,
-      innerPh: m[1],
-      indexInRaw: idx,
-      absRange: [absStart, absEnd],
+      innerPh,
+      indexInRaw: fullIdx,
       loc: {
         start: src.getLocFromIndex(absStart),
         end: src.getLocFromIndex(absEnd),
@@ -223,7 +251,10 @@ const CASING_REGEXES = {
   SCREAMING_CASE: /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/,
 } satisfies Record<Casing, RegExp>;
 
-const TOLERANT_PH_FINDER = /(?!\{\{)\{([^}]*)\}/g;
+// find and return everything between a set of curly braces
+const PH_FINDER_ICU_OFF = /(?!\{\{)\{([^}]*)\}/g;
+// ignore {{placeholder}} completely since ICU doesn't permit it
+const PH_FINDER_ICU_ON = /(?<!\{)\{(?!\{)\s*([^,}]+?)\s*(?:,|})/g;
 
 const RESERVED_PLACEHOLDER_KEYS = new Set<string>([
   // Prototype pollution / object meta
@@ -255,13 +286,13 @@ const RESERVED_PLACEHOLDER_KEYS = new Set<string>([
 ]);
 
 const MESSAGE_IDS = [
-  "forbiddenWhitespace", // no whitespace allowed inside a placeholder
-  "invalidCasing", // depending on what casing is selected. default is camelCase
-  "invalidFirstCharacter", // cannot start with a non alpha char
-  "forbiddenReservedKey", // ban keys like `prototype`, `hasOwnProperty` because they can't be properly used when formatting the message
-  "forbiddenInvisibleChars", // forbid zero-width/invisible/bidi control chars (e.g., \u200B, \u202A–\u202E) since they break matching
-  "invalidCharset", // ASCII letters & digits only (no punctuation, emojis, etc.)
-  "emptyPlaceholder", // forbid {}
+  "forbiddenWhitespace",
+  "invalidCasing",
+  "invalidFirstCharacter",
+  "forbiddenReservedKey",
+  "forbiddenInvisibleChars",
+  "invalidCharset",
+  "emptyPlaceholder",
 ] as const;
 
 const DEFAULT_CHECKS: Record<MessageIds, boolean> = Object.fromEntries(
@@ -270,15 +301,15 @@ const DEFAULT_CHECKS: Record<MessageIds, boolean> = Object.fromEntries(
 
 // * --------- Types
 
+type Span = [start: number, endExclusive: number];
+
 // doing {[key: MessageIds]: boolean} is wrong because TS only allows the usage of string, number, or symbol there
 type PlaceholderChecks = { [K in MessageIds]?: boolean } & { report: boolean };
 
 type PlaceholderInfo = {
-  fullPh: string;
   innerPh: string;
   indexInRaw: number;
-  absRange: [number, number];
-  loc: { start: any; end: any };
+  loc: AST.SourceLocation;
 };
 
 type Context = TSESLint.RuleContext<MessageIds, Options>;
@@ -291,3 +322,5 @@ type Casing =
   | "snake_case"
   | "PascalCase"
   | "SCREAMING_CASE";
+
+type ParsingMode = "standard" | "icu";

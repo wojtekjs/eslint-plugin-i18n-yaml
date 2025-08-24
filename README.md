@@ -5,16 +5,17 @@ Custom ESLint rules for high-quality, consistent i18n YAML files.
 ## Table of Contents
 
 - [✨ Feature set](#-feature-set)
-- [🔧 Setup & installation (current state)](#-setup--installation-current-state)
+- [⚙️ Setup & installation (current state)](#-setup--installation-current-state)
   - [Peer requirements](#peer-requirements)
   - [Flat Config — Quick start](#flat-config--quick-start)
-- [📏 Rules](#-rules)
+- [🛡️ Rules](#-rules)
   - [`i18n-yaml/default-locale-present`](#i18n-yamldefault-locale-present)
   - [`i18n-yaml/allowed-root-locales`](#i18n-yamlallowed-root-locales)
   - [`i18n-yaml/max-depth`](#i18n-yamlmax-depth)
   - [`i18n-yaml/key-order`](#i18n-yamlkey-order)
   - [`i18n-yaml/deep-keys-parity`](#i18n-yamldeep-keys-parity)
   - [`i18n-yaml/placeholder-parity`](#i18n-yamlplaceholder-parity)
+  - [`i18n-yaml/placeholder-format`](#i18n-yamlplaceholder-format)
 
 ## ✨ Feature set
 
@@ -27,7 +28,7 @@ Custom ESLint rules for high-quality, consistent i18n YAML files.
 
 ---
 
-## 🔧 Setup & installation (current state)
+## ⚙️ Setup & installation (current state)
 
 This package is **not published to npm** yet. Use one of the following approaches:
 
@@ -108,13 +109,13 @@ export default [
 
 ---
 
-## 📏 Rules
+## 🛡️ Rules
 
 ### `i18n-yaml/default-locale-present`
 
 **What it is**: Requires the **default locale** (e.g., `en`) to be present at the YAML **root**.
 
-**What it enforces**
+**What it does**
 
 - The presence of the default locale key (`defaultLocale`) at root-level.
 - If missing, the rule reports the **first key of the file** for visibility.
@@ -137,7 +138,7 @@ export default [
 
 **What it is**: Restricts YAML **root keys** to known locales and a small set of allowed non-locale/meta keys.
 
-**What it enforces**
+**What it does**
 
 - Every **root-level** key must be in the union of:
 
@@ -169,7 +170,7 @@ export default [
 
 **What it is**: Caps the **nested path depth** under each top-level block (typically locales).
 
-**What it enforces**
+**What it does**
 
 - Depth is counted in segments, including the leaf key: `en → a → b → c` has depth **4**.
 - Traversal applies to **mapping nodes**; arrays/scalars are not recursed into.
@@ -220,7 +221,7 @@ en:
 
 **What it is**: Keeps root-level keys in a deterministic order to reduce diffs and improve readability. **Includes auto-fixing.**
 
-**What it enforces**
+**What it does**
 
 - Keys are grouped and ordered as:
 
@@ -293,7 +294,7 @@ notes: …
 
 **What it is**: Ensures **all locales share the same nested key structure**. Each locale must contain every key path found in other locales. This is to ensure that every key renders content on the page, irrespective of the language chosen by the user.
 
-**What it enforces**
+**What it does**
 
 - For each locale, reports when a path is missing that exists in at least one other locale.
 - Paths include nested objects and arrays of objects (see examples below).
@@ -358,7 +359,7 @@ fr:
 
 **What it is**: Ensures that **reciprocal keys across locales use the same set of placeholders** (e.g., `{count}`, `{name}`).
 
-**What it enforces**
+**What it does**
 
 - Traverses all locales and collects placeholders from **leaf string values** (scalars).
 - Placeholders are detected with this pattern: `{identifier}` where `identifier` matches `[A-Za-z_][A-Za-z0-9_]*`.
@@ -373,7 +374,7 @@ None.
 
 **Examples**
 
-_Consistent placeholder usage ✅_
+_✅ Consistent placeholder usage_
 
 ```yaml
 en:
@@ -387,7 +388,7 @@ es:
     summary: "Tienes {count} mensajes nuevos"
 ```
 
-_Inonsistent placeholder usage ❌_
+_❌ Inonsistent placeholder usage_
 
 ```yaml
 # ⚠️ Placeholder usage for key 'summary' is not consistent across locales (3 variants) • en → {count}; fr → {count}, {name}; es → ∅
@@ -408,3 +409,76 @@ es:
 
 - Array-based discrepancies are supported. Numeric indices are appended to the last named segment. E.g., `items[1][0]` for the first element of the second array inside a mapping with the key `items`.
 - Variant groups in the error message appear in descending order by number of locales. Within each variant, locales and placeholders are arranged alphabetically.
+
+---
+
+### `i18n-yaml/placeholder-format`
+
+**What it is**: Validates **placeholder token names** inside leaf strings (scalars). Prevents bad tokens like `{ user name }`, `{123id}`, `{constructor}`, or `{}`. Optionally supports ICU MessageFormat syntax.
+
+**What it does**
+
+- By default, checks _simple tokens only_ (e.g., `{tokenPlaceholder}`). With ICU mode enabled, also allows ICU headers (e.g., `{ count, plural, one {...} other {...} }`) — in that case only the **argument name** (`count`) is validated while the remainder of the ICU body is ignored.
+- Runs a configurable set of checks (each can be turned on/off):
+  - **forbiddenWhitespace**: no spaces or multiple tokens inside `{...}`.
+  - **invalidCasing**: must follow the chosen casing convention (default: `camelCase`).
+  - **invalidFirstCharacter**: must start with a letter.
+  - **forbiddenReservedKey**: blocks reserved names (e.g. `constructor`, `hasOwnProperty`, `__proto__`).
+  - **forbiddenInvisibleChars**: disallows zero-width/BiDi control chars.
+  - **invalidCharset**: only ASCII letters, digits, `_`, and `-` allowed (spaces already blocked by `forbiddenWhitespace`).
+  - **emptyPlaceholder**: `{}` is not allowed.
+
+**Configuration**
+
+- **`casing` (default: `"camelCase"`)**: Which naming convention placeholders must follow. Supports: `camelCase`, `kebab-case`, `snake_case`, `PascalCase`, `SCREAMING_CASE`.
+- **`mode` (default: `"standard"`)**: If `"icu"`, the rule will parse ICU MessageFormat headers. It will ignore double-braced tokens (e.g., `{{token}}` would be ignored).
+- **`checks` (default: all `true`)**: Object to selectively disable individual checks.
+
+Example configuration:
+
+```js
+"i18n-yaml/placeholder-format": ["error", {
+  casing: "snake_case",
+  mode: "icu",
+  checks: {
+    invalidCasing: false,       // turn off casing enforcement
+    forbiddenReservedKey: true, // keep reserved key check
+  }
+}]
+```
+
+_✅ Allowed (ICU off)_
+
+```yaml
+en:
+  inbox:
+    summary: "You have {newMessages} new messages"
+    user: "Welcome back, {firstName}"
+```
+
+_❌ Disallowed (ICU off)_
+
+```yaml
+en:
+  inbox:
+    badOne: "Hello { user name }" # spaces → forbiddenWhitespace
+    badTwo: "Ref: {123id}" # starts with digit → invalidFirstCharacter
+    badThree: "Key: {first-name}" # hyphen is ok charset-wise, but fails invalidCasing (camelCase)
+    badFour: "Danger: {constructor}" # reserved → forbiddenReservedKey
+    badFive: "Empty {} here" # → emptyPlaceholder
+```
+
+_✅ Allowed with ICU_
+
+```yaml
+en:
+  cart:
+    count: "{itemCount, plural, one {You have {itemCount} item} other {You have {itemCount} items}}"
+```
+
+> Extracted token is only the ICU arg name `itemCount` (from the header).
+> Placeholders inside ICU bodies are ignored for token validation.
+
+**Notes**
+
+- With `mode` set to `"standard"`, double braces are permitted. Outer braces are considered literal and only the inner braces are treated as the placeholder. E.g., in `{foo{testName} bar}` only `{testName}` is matched as a placeholder and only `testName` is checked against active rules.
