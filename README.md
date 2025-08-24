@@ -25,6 +25,7 @@ Custom ESLint rules for high-quality, consistent i18n YAML files.
 - Keep header keys and locale blocks in a consistent, alphabetical order (autofix).
 - Verify deep key parity across all present locales (or optionally, only against a single locale).
 - Verify placeholder parity across locales for leaf strings.
+- Enforce format rules for placeholders (supports ICU syntax)
 
 ---
 
@@ -420,6 +421,7 @@ es:
 
 - By default, checks _simple tokens only_ (e.g., `{tokenPlaceholder}`). With ICU mode enabled, also allows ICU headers (e.g., `{ count, plural, one {...} other {...} }`) — in that case only the **argument name** (`count`) is validated while the remainder of the ICU body is ignored.
 - Runs a configurable set of checks (each can be turned on/off):
+
   - **forbiddenWhitespace**: no spaces or multiple tokens inside `{...}`.
   - **invalidCasing**: must follow the chosen casing convention (default: `camelCase`).
   - **invalidFirstCharacter**: must start with a letter.
@@ -430,9 +432,9 @@ es:
 
 **Configuration**
 
-- **`casing` (default: `"camelCase"`)**: Which naming convention placeholders must follow. Supports: `camelCase`, `kebab-case`, `snake_case`, `PascalCase`, `SCREAMING_CASE`.
-- **`mode` (default: `"standard"`)**: If `"icu"`, the rule will parse ICU MessageFormat headers. It will ignore double-braced tokens (e.g., `{{token}}` would be ignored).
-- **`checks` (default: all `true`)**: Object to selectively disable individual checks.
+- **`casing`** (`string`, optional, default: `"camelCase"`): Which naming convention placeholders must follow. Supports: `camelCase`, `kebab-case`, `snake_case`, `PascalCase`, `SCREAMING_CASE`.
+- **`mode`** (`string`, optional, default: `"standard"`): If `"icu"`, the rule will parse ICU MessageFormat headers. It will ignore double-braced tokens (e.g., `{{token}}` would be ignored).
+- **`checks`** (`object`, optional, default: all `true`): Object to selectively disable individual checks.
 
 Example configuration:
 
@@ -442,7 +444,7 @@ Example configuration:
   mode: "icu",
   checks: {
     invalidCasing: false,       // turn off casing enforcement
-    forbiddenReservedKey: true, // keep reserved key check
+    forbiddenReservedKey: false, // turn off reserved key check
   }
 }]
 ```
@@ -461,11 +463,11 @@ _❌ Disallowed (ICU off)_
 ```yaml
 en:
   inbox:
-    badOne: "Hello { user name }" # spaces → forbiddenWhitespace
-    badTwo: "Ref: {123id}" # starts with digit → invalidFirstCharacter
-    badThree: "Key: {first-name}" # hyphen is ok charset-wise, but fails invalidCasing (camelCase)
-    badFour: "Danger: {constructor}" # reserved → forbiddenReservedKey
-    badFive: "Empty {} here" # → emptyPlaceholder
+    badOne: "Hello { user name }" # ⚠️ spaces → forbiddenWhitespace
+    badTwo: "Ref: {123id}" # ⚠️ starts with digit → invalidFirstCharacter
+    badThree: "Key: {first-name}" # ⚠️ hyphen is ok charset-wise, but fails invalidCasing (camelCase)
+    badFour: "Danger: {constructor}" # ⚠️ reserved → forbiddenReservedKey
+    badFive: "Empty {} here" # ⚠️ → emptyPlaceholder
 ```
 
 _✅ Allowed with ICU_
