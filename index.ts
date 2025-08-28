@@ -23,11 +23,13 @@ export const configs = {
       // (Only core/default ESLint rules do not start with a slash-prefixed namespace)
       rules: {
         [`${PLUGIN_NAME}/default-locale-present`]: "error",
-        [`${PLUGIN_NAME}/allowed-root-locales`]: "error",
-        [`${PLUGIN_NAME}/deep-keys-parity`]: "error",
-        [`${PLUGIN_NAME}/placeholder-parity`]: "error",
+        [`${PLUGIN_NAME}/allowed-root-keys`]: "error",
+        [`${PLUGIN_NAME}/deep-key-parity`]: "warn",
+        [`${PLUGIN_NAME}/placeholder-parity`]: "warn",
         [`${PLUGIN_NAME}/max-depth`]: "error",
-        [`${PLUGIN_NAME}/value-kind`]: "error",
+        [`${PLUGIN_NAME}/key-order`]: "warn",
+        [`${PLUGIN_NAME}/placeholder-format`]: "error",
+        [`${PLUGIN_NAME}/value-parity`]: "warn",
       },
     },
   ] as Linter.Config[],

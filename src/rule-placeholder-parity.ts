@@ -1,6 +1,12 @@
 import { TSESLint } from "@typescript-eslint/utils";
 import { getStaticYAMLValue, type AST } from "yaml-eslint-parser";
 import { LocaleCode, PH_RE } from "./constants.js";
+import {
+  KeyContentInfo,
+  KeyPathToContentInfoMap,
+  prepareLocs,
+  UsageMap,
+} from "./shared-parity.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
 
 type Options = [];
@@ -27,7 +33,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
         const root = doc.content;
         if (!isYamlMapping(root)) return;
 
-        const kppMap = new Map<string, KeyPlaceholderInfo>();
+        const kppMap = new Map<string, KeyContentInfo>();
         for (const localeBlock of root.pairs) {
           if (!localeBlock.key || !localeBlock.value) continue;
           const stringLocKey = String(getStaticYAMLValue(localeBlock.key));
@@ -46,7 +52,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
               messageId: "placeholderDisparity",
               data: {
                 reportedKey: v.key,
-                usageList: formatUsageListMessage(v.usageMap),
+                usageList: formatPlaceholderUsageListMessage(v.usageMap),
                 variants: `${variants} variants`,
               },
             });
@@ -59,18 +65,12 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
 
 export default rule;
 
-const formatUsageListMessage = (usageMap: PlaceholderUsageMap): string => {
+const formatPlaceholderUsageListMessage = (usageMap: UsageMap): string => {
   // sample message: 'en, fr -> {count}, {name}; es -> ∅'
   let msgArr = [];
   for (const [key, value] of usageMap) {
     const locsArr = Array.from(value).sort();
-    const locs =
-      locsArr.length > 3
-        ? locsArr
-            .slice(0, 3)
-            .join(", ")
-            .concat(`, … (+${locsArr.length - 3})`)
-        : locsArr.join(", ");
+    const formattedLocs = prepareLocs(locsArr);
     const phsArr = JSON.parse(key)
       .map((k: string) => `{${k}}`)
       .sort();
@@ -79,7 +79,7 @@ const formatUsageListMessage = (usageMap: PlaceholderUsageMap): string => {
       locales: locsArr,
       localesCount: locsArr.length,
       placeholders: phsArr,
-      displayMsg: locs + " → " + phs,
+      displayMsg: formattedLocs + " → " + phs,
     });
   }
   msgArr.sort(
@@ -118,7 +118,7 @@ const formatDisplayKey = (fullPath: string[]): string => {
 };
 
 const updateKppMap = (
-  kppMap: KeyPathToPlaceholderInfoMap,
+  kppMap: KeyPathToContentInfoMap,
   loc: AST.SourceLocation,
   path: string[],
   phs: string[],
@@ -137,7 +137,7 @@ const updateKppMap = (
         [phId, new Set<LocaleCode>([locale])],
       ]),
       locations: new Set<AST.SourceLocation>([loc]),
-    } satisfies KeyPlaceholderInfo;
+    } satisfies KeyContentInfo;
     kppMap.set(strId, keyInfo);
   } else {
     const keyPhInfo = kppMap.get(strId);
@@ -154,7 +154,7 @@ const updateKppMap = (
 const dfsPlaceholders = (
   node: AST.YAMLNode,
   currPath: string[],
-  kppMap: KeyPathToPlaceholderInfoMap
+  kppMap: KeyPathToContentInfoMap
 ): void => {
   if (node.type === "YAMLScalar") {
     // m[0] gives the entire raw match like '{hey}' and m[1], m[2], etc. are the "capturing groups", like 'hey'
@@ -181,41 +181,3 @@ const dfsPlaceholders = (
     }
   }
 };
-
-/**
- * Maps a stringified array of placeholder identifiers (e.g. ["{count}", "{name}"])
- * to the set of locales in which that exact placeholder set appears.
- *
- * Example:
- *   {
- *     '["{count}"]' -> Set { "en", "fr" },
- *     '["{count}","{user}"]' -> Set { "es" }
- *   }
- */
-type PlaceholderUsageMap = Map<string, Set<LocaleCode>>;
-
-/**
- * Represents placeholder usage information for a single YAML key.
- *
- * - `key`: The raw key string from the YAML file.
- * - `usageMap`: A mapping of placeholder sets (stringified arrays) to the locales
- *   where they occur.
- * - `locations`: The AST locations of this key across locales, for accurate reporting.
- */
-type KeyPlaceholderInfo = {
-  key: string;
-  usageMap: PlaceholderUsageMap;
-  locations: Set<AST.SourceLocation>;
-};
-
-/**
- * Top-level map that connects each stringified relative YAML key path
- * (excluding the locale prefix) to its placeholder usage information.
- *
- * Example:
- *   {
- *     "messages.welcome" -> KeyPlaceholderInfo { ... }
- *     "errors.notFound" -> KeyPlaceholderInfo { ... }
- *   }
- */
-type KeyPathToPlaceholderInfoMap = Map<string, KeyPlaceholderInfo>;

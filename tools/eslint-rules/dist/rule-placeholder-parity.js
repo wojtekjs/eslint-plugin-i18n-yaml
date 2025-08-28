@@ -1,5 +1,6 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
 import { PH_RE } from "./constants.js";
+import { prepareLocs, } from "./shared-parity.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
 const rule = {
     meta: {
@@ -40,7 +41,7 @@ const rule = {
                             messageId: "placeholderDisparity",
                             data: {
                                 reportedKey: v.key,
-                                usageList: formatUsageListMessage(v.usageMap),
+                                usageList: formatPlaceholderUsageListMessage(v.usageMap),
                                 variants: `${variants} variants`,
                             },
                         });
@@ -51,17 +52,12 @@ const rule = {
     },
 };
 export default rule;
-const formatUsageListMessage = (usageMap) => {
+const formatPlaceholderUsageListMessage = (usageMap) => {
     // sample message: 'en, fr -> {count}, {name}; es -> ∅'
     let msgArr = [];
     for (const [key, value] of usageMap) {
         const locsArr = Array.from(value).sort();
-        const locs = locsArr.length > 3
-            ? locsArr
-                .slice(0, 3)
-                .join(", ")
-                .concat(`, … (+${locsArr.length - 3})`)
-            : locsArr.join(", ");
+        const formattedLocs = prepareLocs(locsArr);
         const phsArr = JSON.parse(key)
             .map((k) => `{${k}}`)
             .sort();
@@ -70,7 +66,7 @@ const formatUsageListMessage = (usageMap) => {
             locales: locsArr,
             localesCount: locsArr.length,
             placeholders: phsArr,
-            displayMsg: locs + " → " + phs,
+            displayMsg: formattedLocs + " → " + phs,
         });
     }
     msgArr.sort((a, b) => b.localesCount - a.localesCount ||
