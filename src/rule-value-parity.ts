@@ -133,39 +133,80 @@ const ignoreKey = (
   stringifiedKeyPath: string,
   ignoredKeys: Set<string>
 ): boolean => {
-  const parsedKeyPath: string[] = JSON.parse(stringifiedKeyPath);
+  const parsedKeyPath: string[] = JSON.parse(stringifiedKeyPath); // locale at indx 0 already stripped
   for (const igKey of ignoredKeys) {
-    const dotSplitIgKeySegs = igKey.trim().split(".");
-    const igKeyHasMultipleSegs = dotSplitIgKeySegs.length > 1;
-    const normalizedIgnoreKey =
-      igKeyHasMultipleSegs && isLocaleCode(dotSplitIgKeySegs[0])
-        ? dotSplitIgKeySegs.slice(1).join(".")
-        : igKey;
+    const trimIgKey = igKey.trim();
+    // if its a plain key, we match at all depths but if it ends in .* its anchored at root despite stripping it we should preserve that info
+    const isIgKeyAnchored = trimIgKey.endsWith(".*");
+    // .* is purely syntactic sugar which can be stripped
+    const igKeyWithoutSyntacticSugar = isIgKeyAnchored
+      ? trimIgKey.slice(0, -2)
+      : trimIgKey;
+    const dotSplitIgKeySegs = igKeyWithoutSyntacticSugar.split(".");
+    const hasIgKeyPathSegWildcard = igKeyWithoutSyntacticSugar.includes("*"); // whether or not one of the path segs uses a wildcard
 
-    // an ending of .* means start walking at locale root level and go down the path until we hit *, then ignore everything below
-    if (normalizedIgnoreKey.endsWith(".*")) {
-      const normalizedIgKeySansWildcard = normalizedIgnoreKey.slice(0, -2);
-      return checkFullPathMatch(normalizedIgKeySansWildcard, parsedKeyPath);
+    const hasIgKeyMultipleSegs = dotSplitIgKeySegs.length > 1;
+    const normalizedIgnoreKey =
+      hasIgKeyMultipleSegs && isLocaleCode(dotSplitIgKeySegs[0])
+        ? dotSplitIgKeySegs.slice(1).join(".").trim()
+        : igKeyWithoutSyntacticSugar.trim();
+
+    if (!normalizedIgnoreKey || normalizedIgnoreKey === "*") continue;
+
+    // if the ignore key is just a single term and has a wildcard, match it at any depth
+    if (!normalizedIgnoreKey.includes(".") && hasIgKeyPathSegWildcard) {
+      for (const i of parsedKeyPath.keys()) {
+        if (checkWildcardSegment(normalizedIgnoreKey, parsedKeyPath, i))
+          return true;
+      }
     }
-    // if a path segment has a wildcard, check the same position in the stringified key path and ignore key to see if they match while tracking overall path match
+
+    // loop through whole ignore key AND parsed key to check full path match, accounting for wildcard matching
     let pathMatching = true;
-    for (const [idx, seg] of normalizedIgnoreKey.split(".").entries()) {
-      if (!pathMatching) break;
-      pathMatching = parsedKeyPath[idx] === seg;
-      if (seg.startsWith("*")) {
-        return parsedKeyPath[idx].endsWith(seg.slice(1));
+    /*
+    since we break early if the ignore key path is longer than the parsed key path, this ensures we've checked the full ignore key and 
+    avoids situations where the ignore key path was party checked and matched all the way because that's a false positive
+    */
+    let fullPathConsumed = false;
+    const splitNormIgKey = normalizedIgnoreKey.split(".");
+    for (const [idx, seg] of splitNormIgKey.entries()) {
+      if (!pathMatching || idx >= parsedKeyPath.length) break;
+      if (seg === "*") {
+        pathMatching = false;
+        break;
       }
-      if (seg.endsWith("*")) {
-        return parsedKeyPath[idx].startsWith(seg.slice(0, -1));
-      }
+      const isLastSeg = idx === splitNormIgKey.length - 1;
+      pathMatching =
+        seg.startsWith("*") || seg.endsWith("*")
+          ? checkWildcardSegment(seg, parsedKeyPath, idx)
+          : parsedKeyPath[idx] === seg;
+      if (isLastSeg) fullPathConsumed = true;
     }
+    if (pathMatching && fullPathConsumed) return true;
+
     // if ignore key is a dotted path, i anchor at root and check if every path step matches
-    if (igKeyHasMultipleSegs) {
-      return checkFullPathMatch(normalizedIgnoreKey, parsedKeyPath);
+    if ((hasIgKeyMultipleSegs || isIgKeyAnchored) && !hasIgKeyPathSegWildcard) {
+      if (checkFullPathMatch(normalizedIgnoreKey, parsedKeyPath)) return true;
+      continue;
     }
     // simple key case - ignore all keys that exactly match it at all nesting depths
     if (parsedKeyPath.includes(normalizedIgnoreKey)) return true;
     continue;
+  }
+  return false;
+};
+
+const checkWildcardSegment = (
+  segment: string,
+  keyPath: string[],
+  idx: number
+): boolean => {
+  if (segment.startsWith("*") && segment.endsWith("*")) return false; // ! '*foo*' is unsupported
+  if (
+    (segment.startsWith("*") && keyPath[idx].endsWith(segment.slice(1))) ||
+    (segment.endsWith("*") && keyPath[idx].startsWith(segment.slice(0, -1)))
+  ) {
+    return true;
   }
   return false;
 };
