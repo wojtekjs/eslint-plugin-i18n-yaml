@@ -68,7 +68,8 @@ const rule = {
                     if ((typeVariants <= 1 && lenVariants <= 1) ||
                         ignoreKey(k, ignoredKeysSet))
                         continue;
-                    if (checks?.arrayLength && lenVariants > 1) {
+                    const isAllValsSeq = Array.from(v.usageMap.keys()).every((k) => k === "sequence");
+                    if (checks?.arrayLength && lenVariants > 1 && isAllValsSeq) {
                         for (const loc of v.locations) {
                             context.report({
                                 loc,
@@ -100,6 +101,8 @@ const rule = {
     },
 };
 export default rule;
+const isIndexPattern = (s) => /^\[\d+\]$/.test(s); // "[12]"
+const isBareNumeric = (s) => /^\d+$/.test(s); // 12
 const ignoreKey = (stringifiedKeyPath, ignoredKeys) => {
     const parsedKeyPath = JSON.parse(stringifiedKeyPath); // locale at indx 0 already stripped
     for (const igKey of ignoredKeys) {
@@ -118,13 +121,35 @@ const ignoreKey = (stringifiedKeyPath, ignoredKeys) => {
             : igKeyWithoutSyntacticSugar.trim();
         if (!normalizedIgnoreKey || normalizedIgnoreKey === "*")
             continue;
-        // if the ignore key is just a single term and has a wildcard, match it at any depth
-        if (!normalizedIgnoreKey.includes(".") && hasIgKeyPathSegWildcard) {
-            for (const i of parsedKeyPath.keys()) {
-                if (checkWildcardSegment(normalizedIgnoreKey, parsedKeyPath, i))
+        // --- SIMPLE-KEY CASE (no dots) ---
+        if (!normalizedIgnoreKey.includes(".")) {
+            // wildcard single-term (foo*, *bar) → match at any depth
+            if (hasIgKeyPathSegWildcard) {
+                for (const i of parsedKeyPath.keys()) {
+                    if (checkWildcardSegment(normalizedIgnoreKey, parsedKeyPath, i))
+                        return true;
+                }
+                continue;
+            }
+            // bracketed index: only match exact "[N]" path segments
+            else if (isIndexPattern(normalizedIgnoreKey)) {
+                if (parsedKeyPath.includes(normalizedIgnoreKey))
                     return true;
             }
+            // plain digits: treat as mapping key only (exclude indices)
+            else if (isBareNumeric(normalizedIgnoreKey)) {
+                for (const seg of parsedKeyPath) {
+                    if (seg === normalizedIgnoreKey)
+                        return true; // mapping key "1"
+                    // segs like "[1]" won't equal "1", because DFS brackets indices
+                }
+            }
+            // generic simple key: exact match at any depth
+            else if (parsedKeyPath.includes(normalizedIgnoreKey))
+                return true;
+            continue;
         }
+        // --- DOTTED-PATH CASE ---
         // loop through whole ignore key AND parsed key to check full path match, accounting for wildcard matching
         let pathMatching = true;
         /*
@@ -136,15 +161,13 @@ const ignoreKey = (stringifiedKeyPath, ignoredKeys) => {
         for (const [idx, seg] of splitNormIgKey.entries()) {
             if (!pathMatching || idx >= parsedKeyPath.length)
                 break;
-            if (seg === "*") {
-                pathMatching = false;
-                break;
-            }
+            if (seg === "*")
+                continue; // allows 'foo.*.bar'
             const isLastSeg = idx === splitNormIgKey.length - 1;
             pathMatching =
                 seg.startsWith("*") || seg.endsWith("*")
                     ? checkWildcardSegment(seg, parsedKeyPath, idx)
-                    : parsedKeyPath[idx] === seg;
+                    : parsedKeyPath[idx] === seg; // handles bracketed key matching as well
             if (isLastSeg)
                 fullPathConsumed = true;
         }
@@ -152,14 +175,10 @@ const ignoreKey = (stringifiedKeyPath, ignoredKeys) => {
             return true;
         // if ignore key is a dotted path, i anchor at root and check if every path step matches
         if ((hasIgKeyMultipleSegs || isIgKeyAnchored) && !hasIgKeyPathSegWildcard) {
-            if (checkFullPathMatch(normalizedIgnoreKey, parsedKeyPath))
+            if (checkRootAnchoredPrefixPathMatch(normalizedIgnoreKey, parsedKeyPath))
                 return true;
             continue;
         }
-        // simple key case - ignore all keys that exactly match it at all nesting depths
-        if (parsedKeyPath.includes(normalizedIgnoreKey))
-            return true;
-        continue;
     }
     return false;
 };
@@ -172,7 +191,7 @@ const checkWildcardSegment = (segment, keyPath, idx) => {
     }
     return false;
 };
-const checkFullPathMatch = (ignoreKey, parsedKeyToCheck) => {
+const checkRootAnchoredPrefixPathMatch = (ignoreKey, parsedKeyToCheck) => {
     for (const [idx, seg] of ignoreKey.split(".").entries()) {
         if (seg !== parsedKeyToCheck[idx])
             return false;
@@ -201,7 +220,8 @@ const valueDfs = (node, kMap, currPath) => {
     }
     if (node.type === "YAMLSequence") {
         for (const [idx, item] of node.entries.entries()) {
-            currPath.push(String(idx));
+            currPath.push(`[${idx}]`);
+            //   currPath.push(String(idx));
             if (!item) {
                 updateKMap(kMap, {
                     path: currPath,
@@ -252,13 +272,12 @@ const formatValueUsageListMessage = (usageMap) => {
 const updateKMap = (kMap, keyInfo) => {
     const { loc, path, nodeType, locale } = keyInfo;
     const strPathId = JSON.stringify(path.slice(1)); // removing locale
-    const keyUsageId = JSON.stringify(nodeType);
     const arrLenId = JSON.stringify(nodeType === "sequence" ? keyInfo.nodeLength : 0);
     if (!kMap.has(strPathId)) {
         const newKeyInfo = {
             key: formatDisplayKey(path),
             usageMap: new Map([
-                [keyUsageId, new Set([locale])],
+                [nodeType, new Set([locale])],
             ]),
             arrLenMap: new Map([
                 [arrLenId, new Set([locale])],
@@ -270,11 +289,11 @@ const updateKMap = (kMap, keyInfo) => {
     else {
         const existingKeyInfo = kMap.get(strPathId);
         existingKeyInfo?.locations.add(loc);
-        if (existingKeyInfo?.usageMap.has(keyUsageId)) {
-            existingKeyInfo.usageMap.get(keyUsageId)?.add(locale);
+        if (existingKeyInfo?.usageMap.has(nodeType)) {
+            existingKeyInfo.usageMap.get(nodeType)?.add(locale);
         }
         else {
-            existingKeyInfo?.usageMap.set(keyUsageId, new Set([locale]));
+            existingKeyInfo?.usageMap.set(nodeType, new Set([locale]));
         }
         if (existingKeyInfo?.arrLenMap.has(arrLenId)) {
             existingKeyInfo.arrLenMap.get(arrLenId)?.add(locale);

@@ -16,6 +16,7 @@ Custom ESLint rules for high-quality, consistent i18n YAML files.
   - [`i18n-yaml/deep-keys-parity`](#i18n-yamldeep-keys-parity)
   - [`i18n-yaml/placeholder-parity`](#i18n-yamlplaceholder-parity)
   - [`i18n-yaml/placeholder-format`](#i18n-yamlplaceholder-format)
+  - [`i18n-yaml/value-parity`](#i18n-yamlvalue-parity)
 
 ## ✨ Feature set
 
@@ -25,7 +26,8 @@ Custom ESLint rules for high-quality, consistent i18n YAML files.
 - Keep header keys and locale blocks in a consistent, alphabetical order (autofix).
 - Verify deep key parity across all present locales (or optionally, only against a single locale).
 - Verify placeholder parity across locales for leaf strings.
-- Enforce format rules for placeholders (supports ICU syntax)
+- Enforce format rules for placeholders (supports ICU syntax).
+- Verify value parity in reciprocal keys across locales.
 
 ---
 
@@ -449,6 +451,8 @@ Example configuration:
 }]
 ```
 
+**Examples**
+
 _✅ Allowed (ICU off)_
 
 ```yaml
@@ -484,3 +488,107 @@ en:
 **Notes**
 
 - With `mode` set to `"standard"`, double braces are permitted. Outer braces are considered literal and only the inner braces are treated as the placeholder. E.g., in `{foo{testName} bar}` only `{testName}` is matched as a placeholder and only `testName` is checked against active rules.
+
+---
+
+### `i18n-yaml/value-parity`
+
+**What it is**: Ensures **reciprocal keys across locales** have the same **value type** (`string`/`number`/`boolean`/`null`/`mapping`/`sequence`) and, when arrays are used everywhere, the same **array length**.
+
+**What it does**
+
+- Walks through every locale in the file and builds a complete list of all relative key paths.
+- For each path, records two things:
+  - the **value type** at that path (e.g., `string`, `mapping`, `sequence`, `number`, `boolean`, `null`), and
+  - if the value is a sequence, the **array length**.
+- Compares the results across locales:
+  - If one locale uses a different type than the others, the rule reports a **value type disparity**.
+  - If all locales use sequences but with different lengths, the rule reports an **array length disparity**.
+- Reports include a breakdown of which locales used which type or length, so it’s easy to spot the outlier.
+
+**Configuration**
+
+- **`checks`** (`object`, optional, default: `{ valueType: true, arrayLength: true }`): Choose which parity checks to enforce:
+
+  - `valueType`: ensure type consistency.
+  - `arrayLength`: ensure arrays have identical length if **all** locales use an array at that path.
+
+- **`ignoredKeys`** (`string[]`, optional, default: `[]`): Paths/keys to exclude from parity checks. Important semantics:
+
+  - Simple keys (e.g., `title`) are ignored everywhere they appear, irrespective of nesting depth.
+  - Dotted key paths are always root-anchored. E.g., `title.primary` only matches if `title` exists as a key directly under the locale. It will not match `page.title.primary`.
+  - Using `.*` on a dotted key path is identical in effect to foregoing it. It is allowed purely for legibility if preferred.
+  - Using `.*` on a simple key causes it to be treated as root-anchored, i.e., it is no longer ignored at all depths but only if the key sits directly under the locale root.
+  - Locale-wide ignores aren’t supported (e.g., `en` or `en.*` do nothing).
+  - Double-barrel wildcards like `*foo*` are not supported.
+  - Keys containing dots in their literal name cannot be ignored.
+  - Mid-string wildcards (e.g., `ba*r`) are not supported.
+  - `foo.*.bar` is supported → ignores all `bar` grandchildren of `foo`.
+  - Array indices can be ignored with brackets:
+    - `fooList.[1]` ignores value at index `1`.
+    - Wildcards inside brackets are not supported (`fooList.[1*]` = invalid).
+    - To ignore a mapping key literally named `"1"`, write `foo.1` (no brackets).
+  - An ignore key of `*` does nothing.
+  - Single-segment prefix/suffix wildcards are allowed: `foo*`, `*bar`.
+
+Example configuration:
+
+```js
+"i18n-yaml/value-parity": ["error", {
+  checks: {
+    // valueType is on by default
+    arrayLength: false,   // ignore array length discrepancies
+  },
+  ignoredKeys: [
+    "profile.photos",     // ignore parity checks for this path
+    "menu.*.hotkey",      // ignore hotkeys under any menu child
+    "users.[0].id",       // ignore the id at index 0 of users list
+    "foo.1"               // ignore a mapping key literally named "1"
+  ]
+}]
+```
+
+**Examples**
+
+_✅ Allowed (matching value types)_
+
+```yaml
+en:
+  profile:
+    name: "Alice"
+    age: 30
+    photos: ["a.jpg", "b.jpg"]
+fr:
+  profile:
+    name: "Alice"
+    age: 28
+    photos: ["a.jpg", "b.jpg"]
+```
+
+_❌ Disallowed (multiple parity errors)_
+
+```yaml
+en:
+  settings:
+    theme: "dark" # string
+  menu:
+    items: ["File", "Edit"] # array length 2
+  # ⚠️ Value types for key 'items[1]' do not match across locales (2 variants) • en → boolean; fr → string
+  integrations: ["Mobile", true] # [string, boolean]
+
+fr:
+  settings:
+    # ⚠️ Value types for key 'theme' do not match across locales (2 variants) • en → string; fr → mapping
+    theme:
+      name: "dark" # mapping
+  menu:
+    # ⚠️ Array lengths for key 'items' do not match across locales (2 variants) • en → 2; fr → 1
+    items: ["Fichier"] # array length 1
+  integrations: ["Mobile", "Email"] # [string, string]
+```
+
+**Notes**
+
+- **Array length parity** is only checked if _all_ locales use a sequence at that path. If some locales use a scalar/mapping there, only **type parity** is flagged. This is to reduce noise when fixing errors.
+- Paths are joined with `"."`. Keys containing literal dots are ambiguous and **cannot** be ignored with `ignoredKeys`. Avoid using them as they can have unintended consequences.
+- For best results, pair with [`eslint-plugin-yml`](https://ota-meshi.github.io/eslint-plugin-yml/) key-naming rules to prevent dots in keys, avoiding path ambiguity.
