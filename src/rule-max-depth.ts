@@ -2,24 +2,24 @@ import { TSESLint } from "@typescript-eslint/utils";
 import type { AST } from "yaml-eslint-parser";
 import { getStaticYAMLValue } from "yaml-eslint-parser";
 import { MAX_NESTING_DEPTH } from "./constants.js";
+import createRule from "./rule-creator.js";
 import { isYamlMapping } from "./utils.js";
 
 type RuleOptions = {
-  maxDepth?: number;
+  maxDepth: number;
 };
-type Options = [RuleOptions?];
 type MessageIds = "exceededMaxDepth";
 
-const rule: TSESLint.RuleModule<MessageIds, Options> = {
+const maxDepth = createRule<[RuleOptions], MessageIds>({
+  name: "max-depth",
   meta: {
     type: "problem",
     docs: {
       description: "Constrain nesting depth in i18n YAML files",
-      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlmax-depth",
     },
     messages: {
       exceededMaxDepth:
-        "Depth limit exceeded at {{locale}}.{{path}}: mapping has depth {{currentDepth}} which exceeds the permitted maximum of {{maxDepth}}",
+        "Depth limit exceeded at '{{locale}}.{{path}}': mapping has depth {{currentDepth}} which exceeds the permitted maximum of {{maxDepth}}",
     },
     schema: [
       {
@@ -31,11 +31,14 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     ],
   },
-  defaultOptions: [],
+  defaultOptions: [
+    {
+      maxDepth: MAX_NESTING_DEPTH,
+    },
+  ],
 
-  create(context) {
-    const options = context?.options[0] ?? ({} as RuleOptions);
-    const maxDepth = options?.maxDepth ?? MAX_NESTING_DEPTH;
+  create(context, [options]) {
+    const { maxDepth } = options;
     return {
       YAMLDocument(doc: AST.YAMLDocument) {
         const root = doc.content;
@@ -44,15 +47,15 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     };
   },
-};
+});
 
-export default rule;
+export default maxDepth;
 
 const descend = (
   node: AST.YAMLContent | AST.YAMLWithMeta,
   currentDepth: number,
   path: string[],
-  context: TSESLint.RuleContext<MessageIds, Options>,
+  context: TSESLint.RuleContext<MessageIds, [RuleOptions]>,
   maxDepth: number
 ): void => {
   if (!isYamlMapping(node)) return;

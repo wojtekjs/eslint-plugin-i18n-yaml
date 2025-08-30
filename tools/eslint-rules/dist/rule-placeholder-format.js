@@ -1,11 +1,21 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
+import createRule from "./rule-creator.js";
 import { isYamlMapping, isYamlSequence } from "./utils.js";
-const rule = {
+const MESSAGE_IDS = [
+    "forbiddenWhitespace",
+    "invalidCasing",
+    "invalidFirstCharacter",
+    "forbiddenReservedKey",
+    "forbiddenInvisibleChars",
+    "invalidCharset",
+    "emptyPlaceholder",
+];
+const placeholderFormat = createRule({
+    name: "placeholder-format",
     meta: {
         type: "problem",
         docs: {
             description: "Enforce placeholder formatting rules in i18n YAML files.",
-            url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlplaceholder-format",
         },
         schema: [
             {
@@ -39,14 +49,14 @@ const rule = {
             emptyPlaceholder: "Empty placeholders '{}' are not allowed",
         },
     },
-    defaultOptions: [],
-    create(context) {
-        const options = (context.options[0] ?? {});
-        const opts = {
-            casing: options.casing ?? "camelCase",
-            mode: options.mode ?? "standard",
-            checks: { ...DEFAULT_CHECKS, ...options.checks },
-        };
+    defaultOptions: [
+        {
+            casing: "camelCase",
+            mode: "standard",
+            checks: Object.fromEntries(MESSAGE_IDS.map((id) => [id, true])),
+        },
+    ],
+    create(context, [options]) {
         return {
             YAMLDocument(doc) {
                 if (!isYamlMapping(doc.content))
@@ -54,13 +64,13 @@ const rule = {
                 for (const localeBlock of doc.content.pairs) {
                     if (!localeBlock.key || !localeBlock.value)
                         continue;
-                    dfsPhs(localeBlock.value, opts, context);
+                    dfsPhs(localeBlock.value, options, context);
                 }
             },
         };
     },
-};
-export default rule;
+});
+export default placeholderFormat;
 // * --------- Logic
 const dfsPhs = (node, opts, ctx) => {
     if (node.type === "YAMLScalar") {
@@ -226,13 +236,4 @@ const RESERVED_PLACEHOLDER_KEYS = new Set([
     "__lookupSetter__",
     "eval",
 ]);
-const MESSAGE_IDS = [
-    "forbiddenWhitespace",
-    "invalidCasing",
-    "invalidFirstCharacter",
-    "forbiddenReservedKey",
-    "forbiddenInvisibleChars",
-    "invalidCharset",
-    "emptyPlaceholder",
-];
 const DEFAULT_CHECKS = Object.fromEntries(MESSAGE_IDS.map((id) => [id, true]));

@@ -1,9 +1,13 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
-const rule = {
+import createRule from "./rule-creator.js";
+import { isYamlMapping } from "./utils.js";
+const defaultLocalePresent = createRule({
+    name: "default-locale-present",
     meta: {
         type: "problem",
         docs: {
             description: "Require default language to be present at the YAML root.",
+            url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamldefault-locale-present",
         },
         schema: [
             {
@@ -15,13 +19,13 @@ const rule = {
             },
         ],
         messages: {
-            missingDefaultLocale: "Missing default locale '{{defaultLang}}' at root",
+            // we can have multiple. these are templates for reports we can make. placeholders mean the report MUST take a data arg with the key(s) being the same as the placeholder(s)
+            missingDefaultLocale: "Missing default locale '{{defaultLocale}}' at root",
         },
     },
-    defaultOptions: [],
-    create(context) {
-        const options = (context.options[0] ?? {});
-        const defaultLang = options.defaultLocale ?? "en";
+    defaultOptions: [{ defaultLocale: "en" }],
+    create(context, [options]) {
+        const { defaultLocale } = options;
         return {
             YAMLDocument(doc) {
                 const root = doc.content;
@@ -32,18 +36,18 @@ const rule = {
                     if (!pair.key)
                         return false;
                     const key = getStaticYAMLValue(pair.key);
-                    return typeof key === "string" && key === defaultLang;
+                    return typeof key === "string" && key === defaultLocale;
                 });
                 if (!hasDefault) {
                     context.report({
+                        // use just the first key in the YAML as the error point
                         loc: { start: anchor, end: anchor },
                         messageId: "missingDefaultLocale",
-                        data: { defaultLang },
+                        data: { defaultLocale }, // required to fill the `defaultLang` placeholder we put in the message.
                     });
                 }
             },
         };
     },
-};
-export default rule;
-const isYamlMapping = (node) => !!node && node.type === "YAMLMapping";
+});
+export default defaultLocalePresent;

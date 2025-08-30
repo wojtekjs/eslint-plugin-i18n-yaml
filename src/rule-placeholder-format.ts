@@ -1,21 +1,30 @@
 import { TSESLint } from "@typescript-eslint/utils";
 import { getStaticYAMLValue, type AST } from "yaml-eslint-parser";
+import createRule from "./rule-creator.js";
 import { isYamlMapping, isYamlSequence } from "./utils.js";
 
 type RuleOptions = {
-  casing?: Casing;
-  mode?: ParsingMode;
-  checks?: Partial<Record<MessageIds, boolean>>;
+  casing: Casing;
+  mode: ParsingMode;
+  checks: Partial<Record<MessageIds, boolean>>;
 };
 
-type Options = [RuleOptions?];
+const MESSAGE_IDS = [
+  "forbiddenWhitespace",
+  "invalidCasing",
+  "invalidFirstCharacter",
+  "forbiddenReservedKey",
+  "forbiddenInvisibleChars",
+  "invalidCharset",
+  "emptyPlaceholder",
+] as const;
 
-const rule: TSESLint.RuleModule<MessageIds, Options> = {
+const placeholderFormat = createRule<[RuleOptions], MessageIds>({
+  name: "placeholder-format",
   meta: {
     type: "problem",
     docs: {
       description: "Enforce placeholder formatting rules in i18n YAML files.",
-      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlplaceholder-format",
     },
     schema: [
       {
@@ -55,28 +64,28 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       emptyPlaceholder: "Empty placeholders '{}' are not allowed",
     },
   },
-  defaultOptions: [],
+  defaultOptions: [
+    {
+      casing: "camelCase",
+      mode: "standard",
+      checks: Object.fromEntries(MESSAGE_IDS.map((id) => [id, true])),
+    },
+  ],
 
-  create(context) {
-    const options = (context.options[0] ?? {}) as RuleOptions;
-    const opts = {
-      casing: options.casing ?? "camelCase",
-      mode: options.mode ?? "standard",
-      checks: { ...DEFAULT_CHECKS, ...options.checks },
-    } as Required<RuleOptions>;
+  create(context, [options]) {
     return {
       YAMLDocument(doc: AST.YAMLDocument) {
         if (!isYamlMapping(doc.content)) return;
         for (const localeBlock of doc.content.pairs) {
           if (!localeBlock.key || !localeBlock.value) continue;
-          dfsPhs(localeBlock.value, opts, context);
+          dfsPhs(localeBlock.value, options, context);
         }
       },
     };
   },
-};
+});
 
-export default rule;
+export default placeholderFormat;
 
 // * --------- Logic
 
@@ -285,16 +294,6 @@ const RESERVED_PLACEHOLDER_KEYS = new Set<string>([
   "eval",
 ]);
 
-const MESSAGE_IDS = [
-  "forbiddenWhitespace",
-  "invalidCasing",
-  "invalidFirstCharacter",
-  "forbiddenReservedKey",
-  "forbiddenInvisibleChars",
-  "invalidCharset",
-  "emptyPlaceholder",
-] as const;
-
 const DEFAULT_CHECKS: Record<MessageIds, boolean> = Object.fromEntries(
   MESSAGE_IDS.map((id) => [id, true])
 ) as Record<MessageIds, boolean>;
@@ -312,7 +311,7 @@ type PlaceholderInfo = {
   loc: AST.SourceLocation;
 };
 
-type Context = TSESLint.RuleContext<MessageIds, Options>;
+type Context = TSESLint.RuleContext<MessageIds, [RuleOptions]>;
 
 type MessageIds = (typeof MESSAGE_IDS)[number];
 

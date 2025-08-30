@@ -1,6 +1,6 @@
-import { TSESLint } from "@typescript-eslint/utils";
 import { getStaticYAMLValue, type AST } from "yaml-eslint-parser";
 import { LocaleCode, PH_RE } from "./constants.js";
+import createRule from "./rule-creator.js";
 import {
   KeyContentInfo,
   KeyPathToContentInfoMap,
@@ -9,16 +9,15 @@ import {
 } from "./shared-parity.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
 
-type Options = [];
 type MessageIds = "placeholderDisparity";
 
-const rule: TSESLint.RuleModule<MessageIds, Options> = {
+const placeholderParity = createRule<[], MessageIds>({
+  name: "placeholder-parity",
   meta: {
     type: "problem",
     docs: {
       description:
         "Enforce usage of identical placeholders in reciprocal keys across locales.",
-      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlplaceholder-parity",
     },
     schema: [],
     messages: {
@@ -61,9 +60,9 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     };
   },
-};
+});
 
-export default rule;
+export default placeholderParity;
 
 const formatPlaceholderUsageListMessage = (usageMap: UsageMap): string => {
   // sample message: 'en, fr -> {count}, {name}; es -> ∅'

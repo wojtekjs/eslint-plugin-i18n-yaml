@@ -1,13 +1,17 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
+import { MAX_NESTING_DEPTH } from "./constants.js";
+import createRule from "./rule-creator.js";
 import { isYamlMapping } from "./utils.js";
-const rule = {
+const maxDepth = createRule({
+    name: "max-depth",
     meta: {
         type: "problem",
         docs: {
             description: "Constrain nesting depth in i18n YAML files",
+            url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlmax-depth",
         },
         messages: {
-            exceededMaxDepth: "Depth of mapping {{locale}}.{{path}} ({{currentDepth}}) exceeds permitted maximum ({{maxDepth}})",
+            exceededMaxDepth: "Depth limit exceeded at {{locale}}.{{path}}: mapping has depth {{currentDepth}} which exceeds the permitted maximum of {{maxDepth}}",
         },
         schema: [
             {
@@ -19,10 +23,13 @@ const rule = {
             },
         ],
     },
-    defaultOptions: [],
-    create(context) {
-        const options = context?.options[0] ?? {};
-        const maxDepth = options?.maxDepth ?? 2;
+    defaultOptions: [
+        {
+            maxDepth: MAX_NESTING_DEPTH,
+        },
+    ],
+    create(context, [options]) {
+        const { maxDepth } = options;
         return {
             YAMLDocument(doc) {
                 const root = doc.content;
@@ -32,8 +39,8 @@ const rule = {
             },
         };
     },
-};
-export default rule;
+});
+export default maxDepth;
 const descend = (node, currentDepth, path, context, maxDepth) => {
     if (!isYamlMapping(node))
         return;

@@ -1,23 +1,21 @@
-import { TSESLint } from "@typescript-eslint/utils";
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
-import { ALL_LOCALE_CODES, META_KEYS } from "./constants.js";
+import { ALL_LOCALE_CODES, LocaleCode, META_KEYS } from "./constants.js";
+import createRule from "./rule-creator.js";
 import { isYamlMapping } from "./utils.js";
 
 type RuleOptions = {
-  allowedLocales?: string[];
-  allowedNonLocaleKeys?: string[];
+  allowedLocales: readonly LocaleCode[];
+  allowedNonLocaleKeys: readonly string[];
 };
-
-type Options = [RuleOptions?];
 type MessageIds = "disallowedRootKey";
 
-const rule: TSESLint.RuleModule<MessageIds, Options> = {
+const allowedRootKeys = createRule<[RuleOptions], MessageIds>({
+  name: "allowed-root-keys",
   meta: {
     type: "problem",
     docs: {
       description:
         "Disallow non-locale or exceptional meta keys at root-level in i18n YAML files",
-      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlallowed-root-keys",
     },
     messages: {
       disallowedRootKey:
@@ -34,14 +32,18 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     ],
   },
-  defaultOptions: [],
+  defaultOptions: [
+    {
+      allowedLocales: ALL_LOCALE_CODES,
+      allowedNonLocaleKeys: META_KEYS,
+    },
+  ],
 
-  create(context) {
-    const options = context.options[0] ?? ({} as RuleOptions);
-    const allowedLocales = options?.allowedLocales ?? ALL_LOCALE_CODES;
-    const allowedNonLocaleKeys = options?.allowedNonLocaleKeys ?? META_KEYS;
-
-    const allAllowedKeys = [...allowedNonLocaleKeys, ...allowedLocales];
+  create(context, [options]) {
+    const allAllowedKeys = [
+      ...options.allowedNonLocaleKeys,
+      ...options.allowedLocales,
+    ];
 
     return {
       YAMLDocument(doc: AST.YAMLDocument) {
@@ -62,6 +64,6 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     };
   },
-};
+});
 
-export default rule;
+export default allowedRootKeys;

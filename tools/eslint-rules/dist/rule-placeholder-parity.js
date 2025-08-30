@@ -1,13 +1,14 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
 import { PH_RE } from "./constants.js";
+import createRule from "./rule-creator.js";
 import { prepareLocs, } from "./shared-parity.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
-const rule = {
+const placeholderParity = createRule({
+    name: "placeholder-parity",
     meta: {
         type: "problem",
         docs: {
             description: "Enforce usage of identical placeholders in reciprocal keys across locales.",
-            url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlplaceholder-parity",
         },
         schema: [],
         messages: {
@@ -50,8 +51,8 @@ const rule = {
             },
         };
     },
-};
-export default rule;
+});
+export default placeholderParity;
 const formatPlaceholderUsageListMessage = (usageMap) => {
     // sample message: 'en, fr -> {count}, {name}; es -> ∅'
     let msgArr = [];

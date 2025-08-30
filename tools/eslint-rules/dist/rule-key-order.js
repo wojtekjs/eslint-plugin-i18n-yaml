@@ -1,7 +1,9 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
-import { ALL_LOCALE_CODES, DEFAULT_LOCALE, META_KEYS } from "./constants.js";
+import { ALL_LOCALE_CODES, DEFAULT_LOCALE, META_KEYS, } from "./constants.js";
+import createRule from "./rule-creator.js";
 import { isYamlMapping } from "./utils.js";
-const rule = {
+const keyOrder = createRule({
+    name: "key-order",
     meta: {
         type: "layout",
         fixable: "code",
@@ -33,14 +35,19 @@ const rule = {
             },
         ],
     },
-    defaultOptions: [],
-    create(context) {
-        const options = context?.options[0] ?? {};
-        const defaultLocale = options.defaultLocale ?? DEFAULT_LOCALE;
+    defaultOptions: [
+        {
+            defaultLocale: DEFAULT_LOCALE,
+            allowedLocales: ALL_LOCALE_CODES,
+            metaKeys: META_KEYS,
+        },
+    ],
+    create(context, [options]) {
+        const { defaultLocale } = options;
         const keyGroups = {
             meta: {
                 expectedGroupPosition: 0,
-                permittedKeys: options.metaKeys ?? META_KEYS,
+                permittedKeys: options.metaKeys,
             },
             default: {
                 expectedGroupPosition: 1,
@@ -114,8 +121,8 @@ const rule = {
             },
         };
     },
-};
-export default rule;
+});
+export default keyOrder;
 const KEY_GROUPS = ["meta", "default", "locales", "other"];
 const buildRichRootPairs = (basePairs, keyGroups, mapStart, mapEnd, srcText) => {
     const basePairLen = basePairs.length;

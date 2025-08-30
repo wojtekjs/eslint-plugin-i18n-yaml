@@ -293,7 +293,7 @@ notes: …
 
 ---
 
-### `i18n-yaml/deep-keys-parity`
+### `i18n-yaml/deep-key-parity`
 
 **What it is**: Ensures **all locales share the same nested key structure**. Each locale must contain every key path found in other locales. This is to ensure that every key renders content on the page, irrespective of the language chosen by the user.
 
@@ -525,7 +525,8 @@ en:
   - Mid-string wildcards (e.g., `ba*r`) are not supported.
   - `foo.*.bar` is supported → ignores all `bar` grandchildren of `foo`.
   - Array indices can be ignored with brackets:
-    - `fooList.[1]` ignores value at index `1`.
+    - `fooList[1]` ignores value at index `1`.
+    - Nested lists/items can be ignored with `fooList[1][0]`.
     - Wildcards inside brackets are not supported (`fooList.[1*]` = invalid).
     - To ignore a mapping key literally named `"1"`, write `foo.1` (no brackets).
   - An ignore key of `*` does nothing.
@@ -589,6 +590,5 @@ fr:
 
 **Notes**
 
-- **Array length parity** is only checked if _all_ locales use a sequence at that path. If some locales use a scalar/mapping there, only **type parity** is flagged. This is to reduce noise when fixing errors.
 - Paths are joined with `"."`. Keys containing literal dots are ambiguous and **cannot** be ignored with `ignoredKeys`. Avoid using them as they can have unintended consequences.
 - For best results, pair with [`eslint-plugin-yml`](https://ota-meshi.github.io/eslint-plugin-yml/) key-naming rules to prevent dots in keys, avoiding path ambiguity.

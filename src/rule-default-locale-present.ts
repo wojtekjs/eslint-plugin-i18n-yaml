@@ -1,28 +1,23 @@
-import type { TSESLint } from "@typescript-eslint/utils";
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
+import createRule from "./rule-creator.js";
 import { isYamlMapping } from "./utils.js";
-
 /**
  * Type for the rule-specific options available in this rule.
  */
 type RuleOptions = {
-  defaultLocale?: string;
+  defaultLocale: string;
 };
-/**
- * The options tuple required by the `RuleModule` type from TSESLint.
- */
-type Options = [RuleOptions?];
 /**
  * String literal type for the MessageIds. This determines what keys are required under `messages` inside of `meta`.
  */
 type MessageIds = "missingDefaultLocale";
 
-const rule: TSESLint.RuleModule<MessageIds, Options> = {
+const defaultLocalePresent = createRule<[RuleOptions], MessageIds>({
+  name: "default-locale-present",
   meta: {
     type: "problem",
     docs: {
       description: "Require default language to be present at the YAML root.",
-      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamldefault-locale-present",
     },
     schema: [
       {
@@ -35,14 +30,14 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     ],
     messages: {
       // we can have multiple. these are templates for reports we can make. placeholders mean the report MUST take a data arg with the key(s) being the same as the placeholder(s)
-      missingDefaultLocale: "Missing default locale '{{defaultLang}}' at root",
+      missingDefaultLocale:
+        "Missing default locale '{{defaultLocale}}' at root",
     },
   },
-  defaultOptions: [],
+  defaultOptions: [{ defaultLocale: "en" }],
 
-  create(context) {
-    const options = (context.options[0] ?? {}) as RuleOptions;
-    const defaultLang = options.defaultLocale ?? "en";
+  create(context, [options]) {
+    const { defaultLocale } = options;
 
     return {
       YAMLDocument(doc: AST.YAMLDocument) {
@@ -54,7 +49,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
         const hasDefault = root.pairs.some((pair) => {
           if (!pair.key) return false;
           const key = getStaticYAMLValue(pair.key);
-          return typeof key === "string" && key === defaultLang;
+          return typeof key === "string" && key === defaultLocale;
         });
 
         if (!hasDefault) {
@@ -62,12 +57,12 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
             // use just the first key in the YAML as the error point
             loc: { start: anchor, end: anchor },
             messageId: "missingDefaultLocale",
-            data: { defaultLang }, // required to fill the `defaultLang` placeholder we put in the message.
+            data: { defaultLocale }, // required to fill the `defaultLang` placeholder we put in the message.
           });
         }
       },
     };
   },
-};
+});
 
-export default rule;
+export default defaultLocalePresent;

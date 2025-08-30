@@ -1,6 +1,6 @@
-import { TSESLint } from "@typescript-eslint/utils";
 import { getStaticYAMLValue, type AST } from "yaml-eslint-parser";
 import { LocaleCode } from "./constants.js";
+import createRule from "./rule-creator.js";
 import {
   formatDisplayKey,
   KeyContentInfo,
@@ -19,19 +19,18 @@ type Checks = {
   arrayLength?: boolean;
 };
 type RuleOptions = {
-  checks?: Checks;
-  ignoredKeys?: string[];
+  checks: Checks;
+  ignoredKeys: readonly string[];
 };
-type Options = [RuleOptions?];
 type MessageIds = "valueTypeDisparity" | "arrayLengthDisparity";
 
-const rule: TSESLint.RuleModule<MessageIds, Options> = {
+const valueParity = createRule<[RuleOptions], MessageIds>({
+  name: "value-parity",
   meta: {
     type: "problem",
     docs: {
       description:
         "Enforces value type and shape parity for reciprocal keys across locales.",
-      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlvalue-parity",
     },
     schema: [
       {
@@ -63,12 +62,8 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     },
   },
   defaultOptions: [{ checks: DEFAULT_CHECKS, ignoredKeys: [] }],
-  create(context) {
-    const options = context.options[0];
-    const { checks, ignoredKeys } = {
-      checks: { ...DEFAULT_CHECKS, ...(options?.checks ?? {}) },
-      ignoredKeys: options?.ignoredKeys ?? [],
-    };
+  create(context, [options]) {
+    const { checks, ignoredKeys } = options;
     const ignoredKeysSet = new Set(ignoredKeys);
 
     return {
@@ -126,9 +121,9 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     };
   },
-};
+});
 
-export default rule;
+export default valueParity;
 
 const isIndexPattern = (s: string) => /^\[\d+\]$/.test(s); // "[12]"
 const isBareNumeric = (s: string) => /^\d+$/.test(s); // 12
@@ -182,7 +177,11 @@ const ignoreKey = (
       }
 
       // generic simple key: exact match at any depth
-      else if (parsedKeyPath.includes(normalizedIgnoreKey)) return true;
+      else {
+        for (const ps of parsedKeyPath) {
+          if (segEqualsOrBracketed(normalizedIgnoreKey, ps)) return true;
+        }
+      }
       continue;
     }
 
@@ -202,7 +201,7 @@ const ignoreKey = (
       pathMatching =
         seg.startsWith("*") || seg.endsWith("*")
           ? checkWildcardSegment(seg, parsedKeyPath, idx)
-          : parsedKeyPath[idx] === seg; // handles bracketed key matching as well
+          : segEqualsOrBracketed(seg, parsedKeyPath[idx]); // handles bracketed key matching as well
       if (isLastSeg) fullPathConsumed = true;
     }
     if (pathMatching && fullPathConsumed) return true;
@@ -215,6 +214,44 @@ const ignoreKey = (
     }
   }
   return false;
+};
+
+export const normalizeKeyPath = (fullPath: string[]): string[] => {
+  if (fullPath.length <= 1) return [...fullPath]; // keep locale (or empty) as-is
+
+  const locale = fullPath[0];
+  const rel = fullPath.slice(1); // without locale
+  if (rel.length === 0) return [locale];
+
+  // walk backward: collect trailing numeric segments
+  let i = rel.length - 1;
+  const idxs: string[] = [];
+  while (i >= 0 && /^\d+$/.test(rel[i])) {
+    idxs.unshift(rel[i]);
+    i--;
+  }
+
+  // no trailing numeric indices → nothing to fold
+  if (idxs.length === 0) return [...fullPath];
+
+  const base = rel[i]; // may be undefined if array is directly under the locale
+  const folded =
+    base !== undefined
+      ? base + idxs.map((n) => `[${n}]`).join("")
+      : `[${idxs.join("][")}]`;
+
+  // build: locale + (prefix before base, if any) + folded
+  const prefix = base !== undefined ? rel.slice(0, i) : [];
+  return [locale, ...prefix, folded];
+};
+
+// Treat "abc" as matching "abc" OR "abc[...]" (any number of [N]s).
+const segEqualsOrBracketed = (ignoreSeg: string, pathSeg: string): boolean => {
+  if (ignoreSeg === pathSeg) return true;
+  // If the ignore segment itself has brackets/wildcards, don't treat it as a base.
+  if (ignoreSeg.includes("[") || ignoreSeg.includes("*")) return false;
+  const base = pathSeg.split("[", 1)[0]; // "abc[1][0]" -> "abc"
+  return base === ignoreSeg;
 };
 
 const checkWildcardSegment = (
@@ -237,7 +274,7 @@ const checkRootAnchoredPrefixPathMatch = (
   parsedKeyToCheck: string[]
 ): boolean => {
   for (const [idx, seg] of ignoreKey.split(".").entries()) {
-    if (seg !== parsedKeyToCheck[idx]) return false;
+    if (!segEqualsOrBracketed(seg, parsedKeyToCheck[idx])) return false;
   }
 
   return true;
@@ -270,8 +307,7 @@ const valueDfs = (
 
   if (node.type === "YAMLSequence") {
     for (const [idx, item] of node.entries.entries()) {
-      currPath.push(`[${idx}]`);
-      //   currPath.push(String(idx));
+      currPath.push(String(idx));
       if (!item) {
         updateKMap(kMap, {
           path: currPath,
@@ -329,14 +365,16 @@ const updateKMap = (
   keyInfo: KeyInfo
 ): void => {
   const { loc, path, nodeType, locale } = keyInfo;
-  const strPathId = JSON.stringify(path.slice(1)); // removing locale
+  const lastPathSeg = formatDisplayKey(path);
+  const compressedPath = normalizeKeyPath(path);
+  const strPathId = JSON.stringify(compressedPath.slice(1)); // removing locale
   const arrLenId = JSON.stringify(
     nodeType === "sequence" ? keyInfo.nodeLength : 0
   );
 
   if (!kMap.has(strPathId)) {
     const newKeyInfo = {
-      key: formatDisplayKey(path),
+      key: lastPathSeg,
       usageMap: new Map<string, Set<LocaleCode>>([
         [nodeType, new Set<LocaleCode>([locale])],
       ]),

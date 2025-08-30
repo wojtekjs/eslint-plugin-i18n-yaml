@@ -1,24 +1,28 @@
-import { TSESLint } from "@typescript-eslint/utils";
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
-import { ALL_LOCALE_CODES, DEFAULT_LOCALE, META_KEYS } from "./constants.js";
+import {
+  ALL_LOCALE_CODES,
+  DEFAULT_LOCALE,
+  LocaleCode,
+  META_KEYS,
+} from "./constants.js";
+import createRule from "./rule-creator.js";
 import { isYamlMapping } from "./utils.js";
 
 type RuleOptions = {
-  metaKeys?: string[];
-  defaultLocale?: string;
-  allowedLocales?: string[];
+  metaKeys: readonly string[];
+  defaultLocale: string;
+  allowedLocales: readonly LocaleCode[];
 };
-type Options = [RuleOptions?];
 type MessageIds = "orderedKeys" | "suggestedFix";
 
-const rule: TSESLint.RuleModule<MessageIds, Options> = {
+const keyOrder = createRule<[RuleOptions], MessageIds>({
+  name: "key-order",
   meta: {
     type: "layout",
     fixable: "code",
     docs: {
       description:
         "Prefer root-level key ordering by meta → default locale → all locales → other keys, with intra-group alphabetical sorting.",
-      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamlkey-order",
     },
     messages: {
       orderedKeys:
@@ -46,16 +50,21 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     ],
   },
-  defaultOptions: [],
+  defaultOptions: [
+    {
+      defaultLocale: DEFAULT_LOCALE,
+      allowedLocales: ALL_LOCALE_CODES,
+      metaKeys: META_KEYS,
+    },
+  ],
 
-  create(context) {
-    const options = context?.options[0] ?? ({} as RuleOptions);
-    const defaultLocale = options.defaultLocale ?? DEFAULT_LOCALE;
+  create(context, [options]) {
+    const { defaultLocale } = options;
 
     const keyGroups: KeyGroupMap = {
       meta: {
         expectedGroupPosition: 0,
-        permittedKeys: options.metaKeys ?? META_KEYS,
+        permittedKeys: options.metaKeys,
       },
       default: {
         expectedGroupPosition: 1,
@@ -153,9 +162,9 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     };
   },
-};
+});
 
-export default rule;
+export default keyOrder;
 
 const KEY_GROUPS = ["meta", "default", "locales", "other"] as const;
 
@@ -165,7 +174,7 @@ type KeyGroupMap = Record<KeyGroup, KeyGroupMetaData>;
 
 type KeyGroupMetaData = {
   expectedGroupPosition: number;
-  permittedKeys: string[];
+  permittedKeys: readonly string[];
 };
 
 type RichPair = {

@@ -1,11 +1,12 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
+import createRule from "./rule-creator.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
-const rule = {
+const deepKeyParity = createRule({
+    name: "deep-key-parity",
     meta: {
         type: "problem",
         docs: {
             description: "Enforce key parity between locales in an i18n YAML file.",
-            url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamldeep-keys-parity",
         },
         messages: {
             deepKeyDisparity: 
@@ -16,16 +17,23 @@ const rule = {
             {
                 type: "object",
                 properties: {
-                    singleComprehensiveLocale: { type: "string" },
+                    singleComprehensiveLocale: {
+                        type: "string",
+                        minLength: 2,
+                        maxLength: 2,
+                    },
                 },
                 additionalProperties: false,
             },
         ],
     },
-    defaultOptions: [],
-    create(context) {
-        const options = (context.options[0] ?? {});
-        const singleComprehensiveLocale = options.singleComprehensiveLocale ?? null;
+    defaultOptions: [
+        {
+            singleComprehensiveLocale: null,
+        },
+    ],
+    create(context, [options]) {
+        const singleComprehensiveLocale = options.singleComprehensiveLocale;
         const EMPTY_PATH_SET = new Set();
         const EMPTY_LOCALE_SET = new Set();
         return {
@@ -81,8 +89,8 @@ const rule = {
             },
         };
     },
-};
-export default rule;
+});
+export default deepKeyParity;
 const buildIndexes = (docContent) => {
     // Creating set-based maps for O(1)/O(k) compute speeds - important on large YAMLs with hundreds of keys
     const init = {

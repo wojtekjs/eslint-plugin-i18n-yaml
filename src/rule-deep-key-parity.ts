@@ -1,20 +1,19 @@
-import { TSESLint } from "@typescript-eslint/utils";
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
 import { LocaleCode } from "./constants.js";
+import createRule from "./rule-creator.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
 
 type RuleOptions = {
-  singleComprehensiveLocale?: LocaleCode;
+  singleComprehensiveLocale: LocaleCode | null;
 };
-type Options = [RuleOptions?];
 type MessageIds = "deepKeyDisparity";
 
-const rule: TSESLint.RuleModule<MessageIds, Options> = {
+const deepKeyParity = createRule<[RuleOptions], MessageIds>({
+  name: "deep-key-parity",
   meta: {
     type: "problem",
     docs: {
       description: "Enforce key parity between locales in an i18n YAML file.",
-      url: "https://github.com/wojtekjs/eslint-plugin-i18n-yaml?tab=readme-ov-file#i18n-yamldeep-keys-parity",
     },
     messages: {
       deepKeyDisparity:
@@ -35,11 +34,14 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     ],
   },
-  defaultOptions: [],
+  defaultOptions: [
+    {
+      singleComprehensiveLocale: null,
+    },
+  ],
 
-  create(context) {
-    const options = (context.options[0] ?? {}) as RuleOptions;
-    const singleComprehensiveLocale = options.singleComprehensiveLocale ?? null;
+  create(context, [options]) {
+    const singleComprehensiveLocale = options.singleComprehensiveLocale;
 
     const EMPTY_PATH_SET = new Set<string>();
     const EMPTY_LOCALE_SET = new Set<LocaleCode>();
@@ -107,9 +109,9 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       },
     };
   },
-};
+});
 
-export default rule;
+export default deepKeyParity;
 
 type Scope = "key" | "nested key";
 

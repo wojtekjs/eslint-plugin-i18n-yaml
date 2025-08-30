@@ -1,7 +1,9 @@
 import { getStaticYAMLValue } from "yaml-eslint-parser";
-import { ALL_LOCALE_CODES } from "./constants.js";
+import { ALL_LOCALE_CODES, META_KEYS } from "./constants.js";
+import createRule from "./rule-creator.js";
 import { isYamlMapping } from "./utils.js";
-const rule = {
+const allowedRootKeys = createRule({
+    name: "allowed-root-keys",
     meta: {
         type: "problem",
         docs: {
@@ -21,12 +23,17 @@ const rule = {
             },
         ],
     },
-    defaultOptions: [],
-    create(context) {
-        const options = context.options[0] ?? {};
-        const allowedLocales = options?.allowedLocales ?? ALL_LOCALE_CODES;
-        const allowedNonLocaleKeys = options?.allowedNonLocaleKeys ?? ["_meta"];
-        const allAllowedKeys = [...allowedNonLocaleKeys, ...allowedLocales];
+    defaultOptions: [
+        {
+            allowedLocales: ALL_LOCALE_CODES,
+            allowedNonLocaleKeys: META_KEYS,
+        },
+    ],
+    create(context, [options]) {
+        const allAllowedKeys = [
+            ...options.allowedNonLocaleKeys,
+            ...options.allowedLocales,
+        ];
         return {
             YAMLDocument(doc) {
                 const root = doc.content;
@@ -47,5 +54,5 @@ const rule = {
             },
         };
     },
-};
-export default rule;
+});
+export default allowedRootKeys;
