@@ -1,6 +1,6 @@
 import { getStaticYAMLValue, type AST } from "yaml-eslint-parser";
 import { LocaleCode, PH_RE } from "./constants.js";
-import createRule from "./rule-creator.js";
+import createRule from "./creator.js";
 import {
   KeyContentInfo,
   KeyPathToContentInfoMap,

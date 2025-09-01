@@ -543,7 +543,7 @@ Example configuration:
   ignoredKeys: [
     "profile.photos",     // ignore parity checks for this path
     "menu.*.hotkey",      // ignore hotkeys under any menu child
-    "users.[0].id",       // ignore the id at index 0 of users list
+    "users[0].id",       // ignore the id at index 0 of users list
     "foo.1"               // ignore a mapping key literally named "1"
   ]
 }]

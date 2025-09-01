@@ -2,7 +2,7 @@ import { TSESLint } from "@typescript-eslint/utils";
 import type { AST } from "yaml-eslint-parser";
 import { getStaticYAMLValue } from "yaml-eslint-parser";
 import { MAX_NESTING_DEPTH } from "./constants.js";
-import createRule from "./rule-creator.js";
+import createRule from "./creator.js";
 import { isYamlMapping } from "./utils.js";
 
 type RuleOptions = {

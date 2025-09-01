@@ -1,5 +1,5 @@
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
-import createRule from "./rule-creator.js";
+import createRule from "./creator.js";
 import { isYamlMapping } from "./utils.js";
 /**
  * Type for the rule-specific options available in this rule.

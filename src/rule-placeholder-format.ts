@@ -1,6 +1,6 @@
 import { TSESLint } from "@typescript-eslint/utils";
 import { getStaticYAMLValue, type AST } from "yaml-eslint-parser";
-import createRule from "./rule-creator.js";
+import createRule from "./creator.js";
 import { isYamlMapping, isYamlSequence } from "./utils.js";
 
 type RuleOptions = {

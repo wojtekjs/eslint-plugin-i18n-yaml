@@ -1,6 +1,6 @@
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
 import { LocaleCode } from "./constants.js";
-import createRule from "./rule-creator.js";
+import createRule from "./creator.js";
 import { isLocaleCode, isYamlMapping, isYamlSequence } from "./utils.js";
 
 type RuleOptions = {

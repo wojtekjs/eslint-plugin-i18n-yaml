@@ -5,7 +5,7 @@ import {
   LocaleCode,
   META_KEYS,
 } from "./constants.js";
-import createRule from "./rule-creator.js";
+import createRule from "./creator.js";
 import { isYamlMapping } from "./utils.js";
 
 type RuleOptions = {

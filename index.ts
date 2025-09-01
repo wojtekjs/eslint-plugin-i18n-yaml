@@ -1,36 +1,52 @@
-import { Linter } from "eslint";
+import type { Linter, Rule } from "eslint";
 import yamlParser from "yaml-eslint-parser";
 
-export const PLUGIN_NAME = "i18n-yaml";
+import type { TSESLint } from "@typescript-eslint/utils";
+import allowedRootKeys from "./src/rule-allowed-root-keys";
+import deepKeyParity from "./src/rule-deep-key-parity";
+import defaultLocalePresent from "./src/rule-default-locale-present";
+import keyOrder from "./src/rule-key-order";
+import maxDepth from "./src/rule-max-depth";
+import placeholderFormat from "./src/rule-placeholder-format";
+import placeholderParity from "./src/rule-placeholder-parity";
+import valueParity from "./src/rule-value-parity";
 
-export const rules = {};
+export const PLUGIN_NAME = "i18n-yaml" as const;
 
+type AnyRule =
+  | TSESLint.RuleModule<string, readonly unknown[]>
+  | Rule.RuleModule;
+
+// 1) Rules map (typed, validated)
+const rawRules = {
+  "default-locale-present": defaultLocalePresent,
+  "allowed-root-keys": allowedRootKeys,
+  "deep-key-parity": deepKeyParity,
+  "placeholder-parity": placeholderParity,
+  "max-depth": maxDepth,
+  "key-order": keyOrder,
+  "placeholder-format": placeholderFormat,
+  "value-parity": valueParity,
+} satisfies Record<string, AnyRule>;
+
+export const rules: Record<string, Rule.RuleModule> = Object.fromEntries(
+  Object.entries(rawRules).map(([k, v]) => [k, v as unknown as Rule.RuleModule])
+);
+
+// 2) Recommended flat-config preset (plain object/array; no defineConfig)
 export const configs = {
-  // Enables the plugin for *.i18n.yaml files with sane defaults.
-  "flat/recommended": [
+  recommended: [
     {
-      name: "i18n-yaml:recommended", // convention is name:purpose
-      files: ["**/*.i18n.yaml", "**/*.i18n.yml"],
-      languageOptions: {
-        // IMPORTANT: use the YAML parser
-        parser: yamlParser,
-      },
-      plugins: {
-        // This states the plugins namespace. It needs to be listed under this in the project its being used
-        [PLUGIN_NAME]: { rules },
-      },
-      // Rules are namespaced. They must always start with the name assigned under `plugins`, followed by a slash and then the rule name
-      // (Only core/default ESLint rules do not start with a slash-prefixed namespace)
-      rules: {
-        [`${PLUGIN_NAME}/default-locale-present`]: "error",
-        [`${PLUGIN_NAME}/allowed-root-keys`]: "error",
-        [`${PLUGIN_NAME}/deep-key-parity`]: "warn",
-        [`${PLUGIN_NAME}/placeholder-parity`]: "warn",
-        [`${PLUGIN_NAME}/max-depth`]: "error",
-        [`${PLUGIN_NAME}/key-order`]: "warn",
-        [`${PLUGIN_NAME}/placeholder-format`]: "error",
-        [`${PLUGIN_NAME}/value-parity`]: "warn",
-      },
+      name: "i18n-yaml:recommended",
+      files: ["**/*.yml", "**/*.yaml"], // or your narrower *.i18n.yml pattern
+      languageOptions: { parser: yamlParser },
+      plugins: { [PLUGIN_NAME]: { rules } },
+      rules: Object.fromEntries(
+        Object.keys(rules).map((name) => [`${PLUGIN_NAME}/${name}`, "warn"])
+      ) as Linter.RulesRecord,
     },
-  ] as Linter.Config[],
+  ],
 };
+
+// 3) Default export (nice interop)
+export default { rules, configs };
