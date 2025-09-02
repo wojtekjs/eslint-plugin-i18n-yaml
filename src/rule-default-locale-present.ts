@@ -1,6 +1,7 @@
 import { AST, getStaticYAMLValue } from "yaml-eslint-parser";
 import createRule from "./creator.js";
 import { isYamlMapping } from "./utils.js";
+
 /**
  * Type for the rule-specific options available in this rule.
  */
@@ -17,7 +18,7 @@ const defaultLocalePresent = createRule<[RuleOptions], MessageIds>({
   meta: {
     type: "problem",
     docs: {
-      description: "Require default language to be present at the YAML root.",
+      description: "Require default locale to be present at the YAML root.",
     },
     schema: [
       {

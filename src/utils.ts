@@ -1,5 +1,5 @@
 import { AST } from "yaml-eslint-parser";
-import { ALL_LOCALE_CODES_SET, LocaleCode } from "./constants.js";
+import { ALL_LOCALE_CODES_SET, LocaleCode } from "./constants";
 
 export const isYamlMapping = (
   node: AST.YAMLNode | null | undefined

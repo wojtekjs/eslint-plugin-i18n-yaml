@@ -3,39 +3,44 @@
   "version": "0.1.0",
   "description": "",
   "license": "ISC",
-
   "type": "module",
-
   "main": "dist/index.cjs",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": { "require": "./dist/index.cjs", "import": "./dist/index.cjs" },
+    ".": {
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.cjs"
+    },
     "./package.json": "./package.json"
   },
-  "files": ["dist"],
-
+  "files": [
+    "dist"
+  ],
   "peerDependencies": {
     "eslint": "^9.33.0",
     "yaml-eslint-parser": "^1.3.0"
   },
   "peerDependenciesMeta": {
-    "yaml-eslint-parser": { "optional": false }
+    "yaml-eslint-parser": {
+      "optional": false
+    }
   },
-
   "devDependencies": {
     "@types/node": "^24.2.1",
     "@typescript-eslint/utils": "^8.39.1",
     "eslint": "^9.33.0",
     "eslint-plugin-yml": "^1.18.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   },
-
   "scripts": {
-    "build": "tsup index.ts --dts --format cjs --clean"
+    "build": "tsup index.ts --dts --format cjs --clean",
+    "test": "vitest"
   },
-
-  "directories": { "test": "tests" },
+  "directories": {
+    "test": "tests"
+  },
   "keywords": [],
   "author": "wojtekjs"
 }
