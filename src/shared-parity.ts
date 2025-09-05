@@ -30,9 +30,7 @@ export const formatDisplayKey = (fullPath: string[]): string => {
 
   // array directly under the locale (no named base key)
   // e.g. ["en","0","1"] -> "[0][1]"
-  return indices.length
-    ? `[${indices.join("][")}]`
-    : relPath[relPath.length - 1];
+  return `[${indices.join("][")}]`;
 };
 
 /**

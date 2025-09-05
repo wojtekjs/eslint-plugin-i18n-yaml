@@ -529,6 +529,7 @@ en:
     - Nested lists/items can be ignored with `fooList[1][0]`.
     - Wildcards inside brackets are not supported (`fooList.[1*]` = invalid).
     - To ignore a mapping key literally named `"1"`, write `foo.1` (no brackets).
+    - Keys cannot be negative (e.g., `-1`); they will be treated like named string keys.
   - An ignore key of `*` does nothing.
   - Single-segment prefix/suffix wildcards are allowed: `foo*`, `*bar`.
 
