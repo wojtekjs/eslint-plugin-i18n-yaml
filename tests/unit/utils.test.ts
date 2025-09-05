@@ -7,8 +7,10 @@ type PickFunction = (p: YAMLProgram) => any;
 type TestRow = [label: string, preYaml: string, pickFn: PickFunction];
 
 const getContent = (ast: YAMLProgram) => ast.body[0].content;
+const getPairsValue = (ast: YAMLProgram, pairIdx: number = 0) =>
+  (getContent(ast) as AST.YAMLMapping).pairs[pairIdx].value;
 const getPickedValue = (preYaml: string, pickFn: PickFunction) =>
-  pickFn(parseForESLint(preYaml).ast);
+  pickFn(parseForESLint(preYaml, { filePath: "x.yaml" }).ast);
 
 describe("utils type guards", () => {
   // isYamlMapping & isYamlSequence invalid tests
@@ -27,10 +29,48 @@ describe("utils type guards", () => {
       "key: value",
       (ast) => (getContent(ast) as AST.YAMLMapping).pairs[0],
     ],
+    ["YAMLScalar", "key: 123", (ast) => getPairsValue(ast)],
     [
-      "YAMLScalar",
-      "key: 123",
-      (ast) => (getContent(ast) as AST.YAMLMapping).pairs[0].value,
+      "YAMLWithMeta (anchor)",
+      `
+defaults: &def
+  type: dev
+            `,
+      (ast) => getPairsValue(ast),
+    ],
+    [
+      "YAMLWithMeta (tag)",
+      `
+home: !!map { a: 1 }
+        `,
+      (ast) => getPairsValue(ast), // `!!map { a: 1 }`
+    ],
+    [
+      "YAMLWithMeta (tag at root)",
+      `
+!!map { a: 1 }
+        `,
+      (ast) => getContent(ast), // `!!map { a: 1 }`
+    ],
+    [
+      "YAMLAlias",
+      `
+defaults: &def { a: 1 }
+test: *def
+        `,
+      (ast) => getPairsValue(ast, 1),
+    ],
+    [
+      "Merge pair (node '<<')",
+      `
+defaults: &def
+  env: dev
+custom:
+  <<: *def
+  `,
+      (ast) =>
+        ((getContent(ast) as AST.YAMLMapping).pairs[1].value as AST.YAMLMapping)
+          .pairs[0],
     ],
   ];
 
@@ -46,6 +86,7 @@ describe("utils type guards", () => {
       expect(isYamlSequence(pickedValue)).toBeFalsy();
     }
   );
+
   // isYamlMapping tests
 
   const validYamlMappingCases: TestRow[] = [
@@ -55,9 +96,17 @@ describe("utils type guards", () => {
       "nested mapping",
       `
 en:
-    test: {abc: hello}
+    test: { abc: hello }
       `,
       (ast) => (getContent(ast) as AST.YAMLMapping).pairs[0].value, // {abc: hello}
+    ],
+    [
+      "merge value mapping (<<: { a: 1 })",
+      `
+x:
+  <<: { a: 1 }
+  `,
+      (ast) => (getPairsValue(ast) as AST.YAMLMapping).pairs[0].value, // => YAMLMapping
     ],
   ];
 
@@ -78,6 +127,14 @@ en:
       "nested sequence",
       "key: [1, 2, 3]",
       (ast) => (getContent(ast) as AST.YAMLMapping).pairs[0].value,
+    ],
+    [
+      "merge value sequence (<<: [{a:1},{b:2}])",
+      `
+x:
+  <<: [ { a: 1 }, { b: 2 } ]
+  `,
+      (ast) => (getPairsValue(ast) as AST.YAMLMapping).pairs[0].value, // => YAMLSequence
     ],
   ];
 
