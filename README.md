@@ -157,7 +157,7 @@ export default [
   - **Valid values:** Any 2-letter locale code (e.g., `"en"`, `"fr"`).
   - **Default:** All known locale codes
 
-- **`allowedNonLocaleKeys`** (`string[]`, optional): Defines which non-locale keys are permitted at the root level (e.g., metadata blocks). Any other non-locale root keys will be reported.
+- **`allowedNonLocaleKeys`** (`string[]`, optional): Defines which non-locale keys are permitted at the root level (e.g., metadata blocks). Does not accept complex keys (e.g., `{ a: 1 }`, `[1, 2]`). Any other non-locale root keys will be reported.
 
   - **Default:** `["_meta"]`
 

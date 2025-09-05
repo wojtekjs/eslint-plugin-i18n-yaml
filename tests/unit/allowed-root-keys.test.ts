@@ -5,6 +5,7 @@ import allowedRootKeys from "../../src/rule-allowed-root-keys";
 const tester = new RuleTester({ languageOptions: { parser: yamlParser } });
 
 tester.run("allowed-root-keys rule", allowedRootKeys as any, {
+  // ✅ VALID
   valid: [
     {
       name: "sinlge default locale",
@@ -166,6 +167,8 @@ _test:
       options: [{ allowedLocales: ["abc"], allowedNonLocaleKeys: ["_test"] }],
     },
   ],
+
+  // ❌ INVALID
   invalid: [
     {
       name: "root key not in default allowed keys (locale or non-locale)",
@@ -344,6 +347,15 @@ oops: 1
 "😀": party
   `,
       errors: [{ messageId: "disallowedRootKey" }],
+    },
+    {
+      name: "custom complex non-locale key",
+      filename: "valid.yaml",
+      code: `
+? { a: 1 }: ok
+      `,
+      errors: [{ messageId: "disallowedRootKey" }],
+      options: [{ allowedNonLocaleKeys: ["{ a: 1 }"] }],
     },
   ],
 });
