@@ -6,7 +6,7 @@ const tester = new RuleTester({
   languageOptions: { parser: yamlParser },
 });
 
-tester.run("default-locale-present", defaultLocalePresent as any, {
+tester.run("default-locale-present rule", defaultLocalePresent as any, {
   // ✅ Success cases
   valid: [
     {

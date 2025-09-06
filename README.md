@@ -412,6 +412,7 @@ es:
 
 - Array-based discrepancies are supported. Numeric indices are appended to the last named segment. E.g., `items[1][0]` for the first element of the second array inside a mapping with the key `items`.
 - Variant groups in the error message appear in descending order by number of locales. Within each variant, locales and placeholders are arranged alphabetically.
+- Keys whose only or first value is a placeholder must be wrapped in quotation marks else the placeholder will be interpreted by the compiler as an object. E.g., `key: {placeholder}` ❌ vs. `key: "{placeholder}"` ✅.
 
 ---
 

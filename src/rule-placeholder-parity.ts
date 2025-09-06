@@ -2,6 +2,7 @@ import { getStaticYAMLValue, type AST } from "yaml-eslint-parser";
 import { LocaleCode, PH_RE } from "./constants.js";
 import createRule from "./creator.js";
 import {
+  formatDisplayKey,
   KeyContentInfo,
   KeyPathToContentInfoMap,
   prepareLocs,
@@ -32,12 +33,13 @@ const placeholderParity = createRule<[], MessageIds>({
         const root = doc.content;
         if (!isYamlMapping(root)) return;
 
+        const anchors = collectAnchors(root, new Map());
         const kppMap = new Map<string, KeyContentInfo>();
         for (const localeBlock of root.pairs) {
           if (!localeBlock.key || !localeBlock.value) continue;
           const stringLocKey = String(getStaticYAMLValue(localeBlock.key));
           if (!isLocaleCode(stringLocKey)) continue;
-          dfsPlaceholders(localeBlock.value, [stringLocKey], kppMap);
+          dfsPlaceholders(localeBlock.value, [stringLocKey], kppMap, anchors);
         }
 
         for (const v of kppMap.values()) {
@@ -91,31 +93,6 @@ const formatPlaceholderUsageListMessage = (usageMap: UsageMap): string => {
   return msgArr.map((m) => m.displayMsg).join("; ");
 };
 
-const formatDisplayKey = (fullPath: string[]): string => {
-  const relPath = fullPath.slice(1); // strip locale
-  if (relPath.length === 0) return "";
-
-  // collect trailing numeric indices
-  let i = relPath.length - 1;
-  const indices: string[] = [];
-  // i >= 0 AND current indexed value is purely numeric (i.e., an array index)
-  while (i >= 0 && /^\d+$/.test(relPath[i])) {
-    indices.unshift(relPath[i]);
-    i--;
-  }
-
-  const base = relPath[i];
-  if (base !== undefined) {
-    return base + indices.map((n) => `[${n}]`).join("");
-  }
-
-  // array directly under the locale (no named base key)
-  // e.g. ["en","0","1"] -> "[0][1]"
-  return indices.length
-    ? `[${indices.join("][")}]`
-    : relPath[relPath.length - 1];
-};
-
 const updateKppMap = (
   kppMap: KeyPathToContentInfoMap,
   loc: AST.SourceLocation,
@@ -153,13 +130,17 @@ const updateKppMap = (
 const dfsPlaceholders = (
   node: AST.YAMLNode,
   currPath: string[],
-  kppMap: KeyPathToContentInfoMap
+  kppMap: KeyPathToContentInfoMap,
+  anchors: AnchorsMap,
+  visited = new WeakSet<AST.YAMLNode>(),
+  aliasLoc?: AST.SourceLocation
 ): void => {
   if (node.type === "YAMLScalar") {
     // m[0] gives the entire raw match like '{hey}' and m[1], m[2], etc. are the "capturing groups", like 'hey'
     const phs = [...String(node.value).matchAll(PH_RE)].map((m) => m[1]);
-    if (phs && isLocaleCode(currPath[0]) && node.loc) {
-      updateKppMap(kppMap, node.loc, currPath, phs, currPath[0]);
+    if (phs && isLocaleCode(currPath[0])) {
+      const reportLoc = aliasLoc ?? node.loc;
+      updateKppMap(kppMap, reportLoc, currPath, phs, currPath[0]);
     }
   } else if (isYamlMapping(node)) {
     for (const pair of node.pairs) {
@@ -167,16 +148,60 @@ const dfsPlaceholders = (
       if (!pair.key || !pV) continue;
       const stringKey = String(getStaticYAMLValue(pair.key));
       currPath.push(stringKey);
-      // recursing regardless of type so that the triple if statement here can handle all values
-      dfsPlaceholders(pV, currPath, kppMap);
+      dfsPlaceholders(pV, currPath, kppMap, anchors, visited, aliasLoc);
       currPath.pop();
     }
   } else if (isYamlSequence(node)) {
     for (const [idx, item] of node.entries.entries()) {
       if (!item) continue;
       currPath.push(String(idx));
-      dfsPlaceholders(item, currPath, kppMap);
+      dfsPlaceholders(item, currPath, kppMap, anchors, visited, aliasLoc);
       currPath.pop();
     }
+  } else if (node.type === "YAMLWithMeta" && node.value) {
+    dfsPlaceholders(node.value, currPath, kppMap, anchors, visited, aliasLoc);
+  } else if (node.type === "YAMLAlias") {
+    const target = anchors.get(node.name);
+    if (target && !visited.has(target)) {
+      visited.add(target);
+      dfsPlaceholders(target, currPath, kppMap, anchors, visited, node.loc);
+    }
   }
+};
+
+type AnchorsMap = Map<string, AST.YAMLNode>;
+
+const collectAnchors = (
+  node: AST.YAMLNode | null | undefined,
+  anchors: AnchorsMap,
+  visited = new WeakSet<object>()
+): AnchorsMap => {
+  if (!node || visited.has(node as object)) return anchors;
+  visited.add(node as object);
+
+  if (node.type === "YAMLWithMeta") {
+    const v = node.value;
+    // first-wins to avoid accidental overwrites if the same anchor name repeats
+    if (node.anchor?.name && v && !anchors.has(node.anchor.name)) {
+      anchors.set(node.anchor.name, v);
+    }
+    if (v) collectAnchors(v, anchors, visited);
+    return anchors;
+  }
+
+  if (isYamlMapping(node)) {
+    for (const pair of node.pairs) {
+      if (pair?.value) collectAnchors(pair.value, anchors, visited);
+    }
+    return anchors;
+  }
+
+  if (isYamlSequence(node)) {
+    for (const item of node.entries) {
+      if (item) collectAnchors(item, anchors, visited);
+    }
+    return anchors;
+  }
+  // Not touching scalars/aliases since they won't contain anchors
+  return anchors;
 };
