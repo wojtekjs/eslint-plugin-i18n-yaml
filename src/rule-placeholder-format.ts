@@ -9,7 +9,7 @@ type RuleOptions = {
   checks: Partial<Record<MessageIds, boolean>>;
 };
 
-const MESSAGE_IDS = [
+export const MESSAGE_IDS = [
   "forbiddenWhitespace",
   "invalidCasing",
   "invalidFirstCharacter",
@@ -233,7 +233,7 @@ const isMessageId = (maybeMsgId: unknown): maybeMsgId is MessageIds => {
 const REGEX_CHECKS = {
   // Zero-width / Bidi controls (expand if policy requires more)
   forbiddenInvisibleChars:
-    /[\u200B-\u200D\uFEFF\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/,
+    /[\u00AD\u034F\u200B-\u200D\u200E\u200F\u2060\u2062-\u2064\u061C\u202A-\u202E\u2066-\u2069\uFEFF]/,
   // Any whitespace in the inner token
   forbiddenWhitespace: /\s/,
   // Contains invalid chars (anything not ASCII letter/digit or '_'/'-' or spaces (covered by whitespace rule))

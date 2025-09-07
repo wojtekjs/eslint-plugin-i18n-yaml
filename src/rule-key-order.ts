@@ -39,7 +39,7 @@ const keyOrder = createRule<[RuleOptions], MessageIds>({
             items: { type: "string" },
             uniqueItems: true,
           },
-          defaultLocale: { type: "string", minLength: 2 },
+          defaultLocale: { type: "string", minLength: 2, maxLength: 2 },
           allowedLocales: {
             type: "array",
             items: { type: "string" },
