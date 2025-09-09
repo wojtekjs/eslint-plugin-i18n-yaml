@@ -2,8 +2,6 @@ import { RuleTester } from "eslint";
 import yamlParser from "yaml-eslint-parser";
 import keyOrder from "../../src/rule-key-order";
 
-// TODO ensure these tests are exhaustive of all autofixes
-
 const tester = new RuleTester({ languageOptions: { parser: yamlParser } });
 
 tester.run("key-order rule", keyOrder as any, {
@@ -18,13 +16,15 @@ tester.run("key-order rule", keyOrder as any, {
     {
       name: "document with only comments",
       filename: "valid.yaml",
-      code: `# header
+      code: `
+# header
 # another comment`,
     },
     {
       name: "non-mapping root: sequence → no-op",
       filename: "valid.yaml",
-      code: `- a
+      code: `
+- a
 - b`,
     },
     {
@@ -435,7 +435,7 @@ _meta: v
 fr: v`,
     },
 
-    // TODO the two tests below fail because inline comments aren't captured correctly and don't move with their key-value pairs as they should
+    // TODO fix autofix moving inline comments in main code
     //     {
     //       name: "per-key in-line comments move with key on fix",
     //       filename: "invalid.yaml",
@@ -483,8 +483,93 @@ fr: v`,
     //         `,
     //     },
 
-    // TODO add tests with multiline values (like an array going over mulitple lines or an object doing that)
-
+    {
+      name: "multi-line flow-style mappings moved fully by fix",
+      filename: "invalid.yaml",
+      code: `
+de: {
+    name: "Alice",  
+    age: 30,  
+    city: "London"
+  }
+ab: 123
+        `,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+ab: 123
+de: {
+    name: "Alice",  
+    age: 30,  
+    city: "London"
+  }
+        `,
+    },
+    {
+      name: "multi-line flow-style sequences moved fully by fix",
+      filename: "invalid.yaml",
+      code: `
+de: 123
+ab: [
+    1,  
+    2,  
+    3,  
+    4
+  ]
+        `,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+ab: [
+    1,  
+    2,  
+    3,  
+    4
+  ]
+de: 123
+        `,
+    },
+    {
+      name: "multi-line flow-style mappings AND sequences moved fully by fix",
+      filename: "invalid.yaml",
+      code: `
+de: {
+    name: "Alice",  
+    age: 30,  
+    city: "London"
+  }
+ab: [
+    1,  
+    2,  
+    3,  
+    4
+  ]
+        `,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+ab: [
+    1,  
+    2,  
+    3,  
+    4
+  ]
+de: {
+    name: "Alice",  
+    age: 30,  
+    city: "London"
+  }
+        `,
+    },
     {
       name: "per-key top-level comments move with key on fix",
       filename: "invalid.yaml",
@@ -660,6 +745,208 @@ fr: v
 ---
 _meta: v
 zzz: v`,
+    },
+    {
+      name: "block scalars (| and >) move intact, with inline comments",
+      filename: "invalid.yaml",
+      code: `
+zzz: |
+  line1
+  line2 # keep
+en: >
+  wrapped line 1
+  wrapped line 2
+_meta: v
+`,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+_meta: v
+en: >
+  wrapped line 1
+  wrapped line 2
+zzz: |
+  line1
+  line2 # keep
+`,
+    },
+    {
+      name: "quoted vs unquoted keys treated equal via getStaticYAMLValue",
+      filename: "invalid.yaml",
+      code: `
+"b": 1
+a: 2
+`,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+a: 2
+"b": 1
+`,
+    },
+    {
+      name: "meta-like but not configured → falls into other (after locales)",
+      filename: "invalid.yaml",
+      code: `
+fr: v
+_notMeta: v
+en: v
+`,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+en: v
+fr: v
+_notMeta: v
+`,
+    },
+    {
+      name: "unknown pseudo-locale en-GB (not allowed) treated as other",
+      filename: "invalid.yaml",
+      code: `
+fr: v
+en-GB: v
+en: v
+`,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+en: v
+fr: v
+en-GB: v
+`,
+    },
+    {
+      name: "multiple blank lines between keys collapse to a single newline",
+      filename: "invalid.yaml",
+      code: `
+z: v
+
+
+a: v
+`,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+a: v
+z: v
+`,
+    },
+    {
+      name: "anchors/aliases as values move intact (per-key internal anchors)",
+      filename: "invalid.yaml",
+      code: `
+b:
+  base: &y
+    name: Bob
+  copy: *y
+a:
+  base: &x
+    name: Alice
+  copy: *x
+`,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+a:
+  base: &x
+    name: Alice
+  copy: *x
+b:
+  base: &y
+    name: Bob
+  copy: *y
+`,
+    },
+    {
+      name: "emoji/unicode keys order consistently (α before β)",
+      filename: "invalid.yaml",
+      code: `
+β: 2
+α: 1
+`,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+α: 1
+β: 2
+`,
+    },
+    // TODO currently not working because a rogue new line is being added.
+    // ! this new line thing is a consistent problem in a lot of places...
+    //     {
+    //       name: "CRLF + header comments + reordering combined",
+    //       filename: "invalid.yaml",
+    //       code: `
+    // # header\r
+    // fr: v\r
+    // _meta: v\r
+    // en: v\r
+    // `,
+    //       errors: [
+    //         { messageId: "orderedKeys" },
+    //         { messageId: "suggestedFix" },
+    //         { messageId: "orderedKeys" },
+    //         { messageId: "orderedKeys" },
+    //       ],
+    //       output: `
+    // # header\r
+    // _meta: v\r
+    // en: v\r
+    // fr: v\r
+    // `,
+    //     },
+    {
+      name: "empty metaKeys → meta group empty; _meta falls into other",
+      filename: "invalid.yaml",
+      options: [
+        {
+          metaKeys: [],
+          defaultLocale: "en",
+          allowedLocales: ["en", "de", "fr"],
+        },
+      ],
+      code: `
+_meta: v
+en: v
+de: v
+a: v
+`,
+      errors: [
+        { messageId: "orderedKeys" },
+        { messageId: "suggestedFix" },
+        { messageId: "orderedKeys" },
+        { messageId: "orderedKeys" },
+      ],
+      output: `
+en: v
+de: v
+_meta: v
+a: v
+`,
     },
   ],
 });
