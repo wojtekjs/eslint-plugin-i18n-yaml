@@ -514,25 +514,14 @@ en:
   - `valueType`: ensure type consistency.
   - `arrayLength`: ensure arrays have identical length if **all** locales use an array at that path.
 
-- **`ignoredKeys`** (`string[]`, optional, default: `[]`): Paths/keys to exclude from parity checks. Important semantics:
-
-  - Simple keys (e.g., `title`) are ignored everywhere they appear, irrespective of nesting depth.
-  - Dotted key paths are always root-anchored. E.g., `title.primary` only matches if `title` exists as a key directly under the locale. It will not match `page.title.primary`.
-  - Using `.*` on a dotted key path is identical in effect to foregoing it. It is allowed purely for legibility if preferred.
-  - Using `.*` on a simple key causes it to be treated as root-anchored, i.e., it is no longer ignored at all depths but only if the key sits directly under the locale root.
-  - Locale-wide ignores aren’t supported (e.g., `en` or `en.*` do nothing).
-  - Double-barrel wildcards like `*foo*` are not supported.
-  - Keys containing dots in their literal name cannot be ignored.
-  - Mid-string wildcards (e.g., `ba*r`) are not supported.
-  - `foo.*.bar` is supported → ignores all `bar` grandchildren of `foo`.
-  - Array indices can be ignored with brackets:
-    - `fooList[1]` ignores value at index `1`.
-    - Nested lists/items can be ignored with `fooList[1][0]`.
-    - Wildcards inside brackets are not supported (`fooList.[1*]` = invalid).
-    - To ignore a mapping key literally named `"1"`, write `foo.1` (no brackets).
-    - Keys cannot be negative (e.g., `-1`); they will be treated like named string keys.
-  - An ignore key of `*` does nothing.
-  - Single-segment prefix/suffix wildcards are allowed: `foo*`, `*bar`.
+- **`ignoredKeys`** (`string[]`, optional, default: `[]`): Array of regex pattern strings used to silence parity checks for matching paths. Matching is done against a locale-stripped, fully-qualified path using dot + bracket notation (e.g., a.b, items[0].id), with quoted literal keys preserved. Patterns are case-sensitive; surrounding whitespace is trimmed; prefer anchoring (^…$) to avoid over-matching. Common ignore pattern examples:
+  - Rooted path with a “one-segment wildcard” (`user.*.id`): `^user\.[^.]+\.id$`
+  - Exact array index at a path (`items[1]`): `^items\[1\]$`
+  - Any index under a list (per-index suppression): `^list\[\d+\]$`
+  - Literal key containing a dot (quoted key `"a.b"`): `^a\.b$`
+  - Suppress any leaf segment named 'objectAbc' (any depth): `(^|\\.)objectAbc$`
+  - Suppress any key with a prefix of 'abc': `(^|\\.)abc[^.]*(\\.|$)`
+  - Suppress any key with a suffix of 'xyz': `^[^.[\\]]*xyz(\\.|$)`
 
 Example configuration:
 
